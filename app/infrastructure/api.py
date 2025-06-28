@@ -14,7 +14,7 @@ from ..application.use_cases import (
     GetCurrentSunEventUseCase,
 )
 from .background_service import SunEventMonitorService
-from .repositories import SQLiteSunEventRepository
+from .json_repository import JSONSunEventRepository
 
 
 class SunEventPeriodResponse(BaseModel):
@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     )
 
     # Initialize repository and service
-    repository = SQLiteSunEventRepository()
+    repository = JSONSunEventRepository()
     monitor_service = SunEventMonitorService(repository)
 
     # Start background task in a separate thread

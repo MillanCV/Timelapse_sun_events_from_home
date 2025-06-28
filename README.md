@@ -9,6 +9,7 @@ A FastAPI-based service that monitors sun events (sunrise and sunset periods) us
 - **Sunset Period Detection**: Detects sunset periods from evening golden hour - 30 minutes to dusk
 - **REST API**: Provides endpoints to check current status, upcoming events, and service health
 - **Real-time Logging**: Comprehensive logging of sun event periods and transitions
+- **JSON Configuration**: Simple JSON-based configuration for sun events data
 
 ## Architecture
 
@@ -26,7 +27,7 @@ The project follows clean architecture principles with the following layers:
 uv sync
 ```
 
-2. The project uses the existing `sun_events.db` SQLite database with sun event data.
+2. The project uses JSON configuration files in `config/sun_events.json` for sun event data.
 
 ## Usage
 
@@ -41,7 +42,7 @@ python main.py
 Or using uvicorn directly:
 
 ```bash
-uvicorn app.infrastructure.api:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.infrastructure.api:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 The service will start and begin monitoring sun events in the background.
@@ -70,6 +71,27 @@ The background task:
 - **Sunrise Period**: From dawn to end of morning golden hour + 30 minutes
 - **Sunset Period**: From evening golden hour - 30 minutes to dusk
 
+### Configuration
+
+Sun events are configured in `config/sun_events.json`:
+
+```json
+{
+  "sun_events": {
+    "2025-06-27": {
+      "dawn": "06:16:43",
+      "sunrise": "06:47:27",
+      "sunset": "22:25:57",
+      "dusk": "22:56:40",
+      "golden_hour_morning_end": "07:36:35",
+      "golden_hour_evening_start": "22:03:35",
+      "sun_altitude": 69.92,
+      "azimuth": 180.0
+    }
+  }
+}
+```
+
 ## Testing
 
 Run tests with pytest:
@@ -89,14 +111,16 @@ remoteIxus/
 │   ├── application/
 │   │   └── use_cases.py         # Business logic use cases
 │   └── infrastructure/
-│       ├── repositories.py      # SQLite repository implementation
+│       ├── json_repository.py   # JSON repository implementation
 │       ├── background_service.py # Background monitoring service
 │       └── api.py               # FastAPI application
+├── config/
+│   └── sun_events.json          # Sun events configuration
 ├── tests/
 │   └── test_repository.py       # Repository tests
 ├── main.py                      # Application entry point
 ├── pyproject.toml               # Project configuration
-└── sun_events.db                # SQLite database with sun events
+└── .gitignore                   # Git ignore rules
 ```
 
 ## Background Task Implementation
@@ -109,3 +133,11 @@ The background task uses a sophisticated approach to prevent timing drift:
 4. **Resource cleanup**: Proper cleanup of resources on shutdown
 
 This ensures the monitoring remains accurate over long periods without accumulating timing errors.
+
+## Benefits of JSON Configuration
+
+- **Simplicity**: No database setup or maintenance required
+- **Performance**: Fast in-memory lookups
+- **Version Control**: Easy to track changes in git
+- **Human Readable**: Easy to edit and understand
+- **Portability**: No external dependencies

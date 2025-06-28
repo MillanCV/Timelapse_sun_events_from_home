@@ -28,7 +28,6 @@ class SunEventMonitorService:
         self.logger = logging.getLogger(__name__)
         self._running = False
         self._current_period: Optional[SunEventPeriod] = None
-        self._next_check_time: Optional[datetime] = None
 
     async def start(self):
         """Start the background monitoring service."""
@@ -71,7 +70,7 @@ class SunEventMonitorService:
                     f"In {current_response.current_period.period_type} period, "
                     f"waiting {wait_seconds:.0f} seconds until it ends"
                 )
-                await asyncio.sleep(min(wait_seconds, 60))  # Check every minute
+                await asyncio.sleep(wait_seconds)
             else:
                 self._log_period_end(current_response.current_period)
                 self._current_period = None
@@ -83,7 +82,8 @@ class SunEventMonitorService:
 
             upcoming_response = self.check_upcoming_use_case.execute(
                 CheckUpcomingEventsRequest(
-                    current_time=current_time, look_ahead_minutes=30
+                    current_time=current_time,
+                    look_ahead_minutes=1440,  # 24 hours
                 )
             )
 
@@ -98,33 +98,40 @@ class SunEventMonitorService:
                 if wait_seconds > 0:
                     self.logger.info(
                         f"Next {first_period.period_type} period starts in "
-                        f"{wait_seconds:.0f} seconds"
+                        f"{wait_seconds:.0f} seconds "
+                        f"(at {first_period.start_time.strftime('%H:%M:%S')})"
                     )
-                    await asyncio.sleep(min(wait_seconds, 60))
+                    await asyncio.sleep(wait_seconds)
                 else:
-                    # Period should start now, return to continue to next cycle
+                    # Period should start now, continue to next cycle
                     return
             else:
-                # No upcoming periods, wait for next check
-                self.logger.info("No upcoming sun events, waiting 1 minute")
-                await asyncio.sleep(self.check_interval_seconds)  # 1 minute
+                # No upcoming periods in 24 hours, check again in 1 hour
+                self.logger.info(
+                    "No upcoming sun events in 24 hours, checking again in 1 hour"
+                )
+                await asyncio.sleep(3600)  # 1 hour
 
     def _log_period_start(self, period: SunEventPeriod):
         """Log when a sun event period starts."""
+        duration_minutes = (period.end_time - period.start_time).total_seconds() / 60
+
         self.logger.info(
             f"🌅 {period.period_type.upper()} PERIOD STARTING\n"
             f"   Date: {period.event_date.strftime('%Y-%m-%d')}\n"
             f"   Start: {period.start_time.strftime('%H:%M:%S')}\n"
             f"   End: {period.end_time.strftime('%H:%M:%S')}\n"
-            f"   Duration: {(period.end_time - period.start_time).total_seconds() / 60:.0f} minutes"
+            f"   Duration: {duration_minutes:.0f} minutes"
         )
 
     def _log_period_end(self, period: SunEventPeriod):
         """Log when a sun event period ends."""
+        duration_minutes = (period.end_time - period.start_time).total_seconds() / 60
+
         self.logger.info(
             f"🌅 {period.period_type.upper()} PERIOD ENDED\n"
             f"   Date: {period.event_date.strftime('%Y-%m-%d')}\n"
-            f"   Duration: {(period.end_time - period.start_time).total_seconds() / 60:.0f} minutes"
+            f"   Duration: {duration_minutes:.0f} minutes"
         )
 
     def _log_upcoming_periods(self, periods: list[SunEventPeriod]):

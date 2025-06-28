@@ -13,7 +13,7 @@ from app.application.use_cases import (
     GetCurrentSunEventUseCase,
     CheckUpcomingSunEventsUseCase,
 )
-from app.infrastructure.repositories import SQLiteSunEventRepository
+from app.infrastructure.json_repository import JSONSunEventRepository
 
 
 async def test_background_logic():
@@ -25,7 +25,7 @@ async def test_background_logic():
     logger = logging.getLogger(__name__)
 
     # Initialize repository
-    repository = SQLiteSunEventRepository()
+    repository = JSONSunEventRepository()
 
     # Initialize use cases
     get_current_use_case = GetCurrentSunEventUseCase(repository)
