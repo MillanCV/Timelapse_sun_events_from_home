@@ -1,0 +1,29 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+description: 
+globs: 
+alwaysApply: true
+---
+We program in fully typed Python.
+
+We use FastAPI with SQLite.
+
+We use the repository pattern to separate persistence logic from our business logic.
+
+We use use cases, encapsulating actions on the domain in classes that have an execute method which receives a dataclass with the execution arguments. These use cases receive their dependencies (such as repositories) via injection.
+
+We use domain objects that are separate from the database data entities. The mapping between both entities happens in the repository.
+
+We have several layers:
+
+Domain, where we create the entities
+
+Application, where we create the use cases
+
+Infrastructure, where we create the endpoints and specific implementations of abstractions, such as repositories
+
+We build a comprehensive set of tests
