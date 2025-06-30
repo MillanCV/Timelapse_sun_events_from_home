@@ -5,7 +5,11 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from ..domain.entities import CameraStatus, TimelapseRecordingParameters
+from ..domain.entities import (
+    CameraStatus,
+    TimelapseRecordingParameters,
+    CameraShootingParameters,
+)
 from ..domain.services import CameraControlService, TimelapseScriptGenerator
 
 
@@ -14,7 +18,10 @@ class CHDKPTPScriptGenerator(TimelapseScriptGenerator):
 
     def __init__(
         self,
-        scripts_directory: str = "/home/arrumada/Dev/CanonCameraControl/Scripts/Operations/OperationsWithParameters",
+        scripts_directory: str = (
+            "/home/arrumada/Dev/CanonCameraControl/Scripts/Operations/"
+            "OperationsWithParameters"
+        ),
     ):
         self.scripts_directory = Path(scripts_directory)
         self.logger = logging.getLogger(__name__)
@@ -54,6 +61,56 @@ class CHDKPTPCameraService(CameraControlService):
         self.output_directory = Path(output_directory)
         self.logger = logging.getLogger(__name__)
         self._current_recording: Optional[TimelapseRecordingParameters] = None
+
+    async def shoot_camera(self, parameters: CameraShootingParameters) -> bool:
+        """Shoot camera with given parameters."""
+        try:
+            self.logger.info(f"Starting camera shooting with {parameters.shots} shots")
+
+            # Build CHDKPTP command based on the bash script
+            chdkptp_script = self.chdkptp_location / "chdkptp.sh"
+
+            if not chdkptp_script.exists():
+                self.logger.error(f"CHDKPTP script not found: {chdkptp_script}")
+                return False
+
+            # Construct the command similar to the bash script
+            rs_command = (
+                f"rs {self.output_directory} -shots={parameters.shots} "
+                f"-int={parameters.interval} -tv={parameters.speed} "
+                f"-sd={parameters.subject_distance} -isomode={parameters.iso_value}"
+            )
+
+            cmd = [
+                "sudo",
+                str(chdkptp_script),
+                "-ec",
+                "-erec",
+                "-eclock -sync",
+                "-eluar set_lcd_display(0)",
+                "-eluar set_mf(1)",
+                "-eluar set_aelock(1)",
+                "-eluar set_aflock(1)",
+                f"-e {rs_command}",
+                "-eplay",
+                "-ed A/rawopint.csv /home/arrumada/Dev/CanonCameraControl/Scripts/Logs",
+                "-edis",
+            ]
+
+            self.logger.info(f"Executing camera shooting command: {' '.join(cmd)}")
+
+            result = await self._run_chdkptp_command(cmd)
+
+            if result.returncode == 0:
+                self.logger.info("Camera shooting completed successfully")
+                return True
+            else:
+                self.logger.error(f"Camera shooting failed: {result.stderr}")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"Error shooting camera: {e}")
+            return False
 
     async def start_timelapse_recording(
         self, parameters: TimelapseRecordingParameters

@@ -16,6 +16,17 @@ class TimelapseRecordingParameters:
 
 
 @dataclass
+class CameraShootingParameters:
+    """Domain entity for camera shooting parameters."""
+
+    subject_distance: float  # SD parameter
+    speed: float  # Speed parameter (shutter speed)
+    iso_value: int  # ISO value
+    shots: int  # Number of shots
+    interval: float  # Interval time between shots
+
+
+@dataclass
 class CameraCommand:
     """Domain entity for camera commands."""
 

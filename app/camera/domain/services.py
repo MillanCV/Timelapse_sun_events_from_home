@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
 
-from .entities import CameraStatus, TimelapseRecordingParameters
+from .entities import (
+    CameraStatus,
+    TimelapseRecordingParameters,
+    CameraShootingParameters,
+)
 
 
 class CameraControlService(ABC):
@@ -11,6 +15,11 @@ class CameraControlService(ABC):
         self, parameters: TimelapseRecordingParameters
     ) -> bool:
         """Start timelapse recording with given parameters."""
+        pass
+
+    @abstractmethod
+    async def shoot_camera(self, parameters: CameraShootingParameters) -> bool:
+        """Shoot camera with given parameters."""
         pass
 
     @abstractmethod

@@ -1,7 +1,16 @@
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 
+from ...camera.application.use_cases import (
+    ShootCameraRequest,
+    ShootCameraUseCase,
+)
+from ...camera.infrastructure.chdkptp_camera_service import (
+    CHDKPTPCameraService,
+    CHDKPTPScriptGenerator,
+)
 from ...sun_events.application.use_cases import (
     CheckUpcomingEventsRequest,
     CheckUpcomingSunEventsUseCase,
@@ -39,6 +48,24 @@ class TimelapseResponseModel(BaseModel):
     estimated_file_size_mb: float
 
 
+class ShootCameraRequestModel(BaseModel):
+    """Pydantic model for camera shooting request."""
+
+    subject_distance: float
+    speed: float
+    iso_value: int
+    shots: int
+    interval: float
+
+
+class ShootCameraResponseModel(BaseModel):
+    """Pydantic model for camera shooting response."""
+
+    success: bool
+    message: str
+    shooting_id: Optional[str] = None
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(title="Sun Events API", version="1.0.0")
@@ -48,6 +75,11 @@ def create_app() -> FastAPI:
     get_current_use_case = GetCurrentSunEventUseCase(sun_event_repository)
     get_upcoming_use_case = CheckUpcomingSunEventsUseCase(sun_event_repository)
     calculate_timelapse_use_case = CalculateTimelapseUseCase(sun_event_repository)
+
+    # Initialize camera dependencies
+    script_generator = CHDKPTPScriptGenerator()
+    camera_service = CHDKPTPCameraService(script_generator)
+    shoot_camera_use_case = ShootCameraUseCase(camera_service)
 
     @app.get("/")
     async def root():
@@ -66,7 +98,7 @@ def create_app() -> FastAPI:
                 "period_type": response.current_period.period_type,
                 "start_time": response.current_period.start_time.isoformat(),
                 "end_time": response.current_period.end_time.isoformat(),
-                "event_date": response.current_period.event_date.strftime("%Y-%m-%d"),
+                "event_date": (response.current_period.event_date.strftime("%Y-%m-%d")),
             }
         else:
             return {"message": "No current sun event period"}
@@ -121,5 +153,27 @@ def create_app() -> FastAPI:
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+
+    @app.post("/camera/shoot", response_model=ShootCameraResponseModel)
+    async def shoot_camera(request: ShootCameraRequestModel):
+        """Shoot camera with given parameters."""
+        try:
+            response = shoot_camera_use_case.execute(
+                ShootCameraRequest(
+                    subject_distance=request.subject_distance,
+                    speed=request.speed,
+                    iso_value=request.iso_value,
+                    shots=request.shots,
+                    interval=request.interval,
+                )
+            )
+
+            return ShootCameraResponseModel(
+                success=response.success,
+                message=response.message,
+                shooting_id=response.shooting_id,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
     return app

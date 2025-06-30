@@ -2,7 +2,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from ..domain.entities import CameraStatus, TimelapseRecordingParameters
+from ..domain.entities import (
+    CameraStatus,
+    TimelapseRecordingParameters,
+    CameraShootingParameters,
+)
 from ..domain.services import CameraControlService, TimelapseScriptGenerator
 
 
@@ -25,6 +29,26 @@ class StartTimelapseRecordingResponse:
     success: bool
     message: str
     recording_id: Optional[str] = None
+
+
+@dataclass
+class ShootCameraRequest:
+    """Request for shooting camera."""
+
+    subject_distance: float
+    speed: float
+    iso_value: int
+    shots: int
+    interval: float
+
+
+@dataclass
+class ShootCameraResponse:
+    """Response for shooting camera."""
+
+    success: bool
+    message: str
+    shooting_id: Optional[str] = None
 
 
 @dataclass
@@ -74,7 +98,10 @@ class StartTimelapseRecordingUseCase:
                 return StartTimelapseRecordingResponse(
                     success=True,
                     message=f"Timelapse recording started for {request.period_type}",
-                    recording_id=f"{request.period_type}_{request.start_time.strftime('%Y%m%d_%H%M%S')}",
+                    recording_id=(
+                        f"{request.period_type}_"
+                        f"{request.start_time.strftime('%Y%m%d_%H%M%S')}"
+                    ),
                 )
             else:
                 return StartTimelapseRecordingResponse(
@@ -86,6 +113,54 @@ class StartTimelapseRecordingUseCase:
             return StartTimelapseRecordingResponse(
                 success=False,
                 message=f"Error starting timelapse recording: {str(e)}",
+            )
+
+
+class ShootCameraUseCase:
+    """Use case for shooting camera."""
+
+    def __init__(self, camera_control_service: CameraControlService):
+        self.camera_control_service = camera_control_service
+
+    def execute(self, request: ShootCameraRequest) -> ShootCameraResponse:
+        """Execute the use case."""
+        try:
+            # Check if camera is connected
+            if not self.camera_control_service.is_camera_connected():
+                return ShootCameraResponse(
+                    success=False,
+                    message="Camera is not connected",
+                )
+
+            # Create shooting parameters
+            parameters = CameraShootingParameters(
+                subject_distance=request.subject_distance,
+                speed=request.speed,
+                iso_value=request.iso_value,
+                shots=request.shots,
+                interval=request.interval,
+            )
+
+            # Shoot camera
+            success = self.camera_control_service.shoot_camera(parameters)
+
+            if success:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                return ShootCameraResponse(
+                    success=True,
+                    message=f"Camera shooting completed with {request.shots} shots",
+                    shooting_id=f"shooting_{timestamp}",
+                )
+            else:
+                return ShootCameraResponse(
+                    success=False,
+                    message="Failed to shoot camera",
+                )
+
+        except Exception as e:
+            return ShootCameraResponse(
+                success=False,
+                message=f"Error shooting camera: {str(e)}",
             )
 
 
