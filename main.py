@@ -91,11 +91,13 @@ async def lifespan(app: FastAPI):
     logging.info("Application shutdown complete")
 
 
+# Create FastAPI app instance with lifespan
+app = create_app()
+app.router.lifespan_context = lifespan
+
+
 def main():
     """Main application entry point."""
-    # Create FastAPI app instance with lifespan
-    app = create_app()
-    app.router.lifespan_context = lifespan
 
     uvicorn.run(
         app,
