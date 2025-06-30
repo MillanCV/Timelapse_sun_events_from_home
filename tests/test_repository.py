@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from app.infrastructure.json_repository import JSONSunEventRepository
+from app.sun_events.infrastructure.json_repository import JSONSunEventRepository
 
 
 def test_repository_can_read_sun_events():
