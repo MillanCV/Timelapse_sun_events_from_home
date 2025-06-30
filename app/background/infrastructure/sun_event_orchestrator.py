@@ -121,7 +121,7 @@ class SunEventOrchestrator:
             )
 
             # Start recording
-            response = self.start_recording_use_case.execute(request)
+            response = await self.start_recording_use_case.execute(request)
 
             if response.success:
                 self.logger.info(f"📸 Camera recording started: {response.message}")

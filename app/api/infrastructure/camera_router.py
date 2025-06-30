@@ -74,7 +74,7 @@ def create_camera_router() -> APIRouter:
     async def shoot_camera(request: ShootCameraRequestModel):
         """Shoot camera with given parameters."""
         try:
-            response = shoot_camera_use_case.execute(
+            response = await shoot_camera_use_case.execute(
                 ShootCameraRequest(
                     subject_distance=request.subject_distance,
                     speed=request.speed,
@@ -97,7 +97,7 @@ def create_camera_router() -> APIRouter:
     async def get_camera_status():
         """Get current camera status."""
         try:
-            response = get_camera_status_use_case.execute()
+            response = await get_camera_status_use_case.execute()
             status = response.camera_status
 
             return CameraStatusResponseModel(
@@ -239,7 +239,7 @@ def create_camera_router() -> APIRouter:
         """Test endpoint to verify camera functionality with minimal parameters."""
         try:
             # Use minimal test parameters
-            response = shoot_camera_use_case.execute(
+            response = await shoot_camera_use_case.execute(
                 ShootCameraRequest(
                     subject_distance=1.0,  # 1 meter
                     speed=1.0 / 60.0,  # 1/60 second

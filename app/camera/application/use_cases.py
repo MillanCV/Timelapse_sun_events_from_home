@@ -70,13 +70,13 @@ class StartTimelapseRecordingUseCase:
         self.camera_control_service = camera_control_service
         self.script_generator = script_generator
 
-    def execute(
+    async def execute(
         self, request: StartTimelapseRecordingRequest
     ) -> StartTimelapseRecordingResponse:
         """Execute the use case."""
         try:
             # Check if camera is connected
-            if not self.camera_control_service.is_camera_connected():
+            if not await self.camera_control_service.is_camera_connected():
                 return StartTimelapseRecordingResponse(
                     success=False,
                     message="Camera is not connected",
@@ -93,7 +93,9 @@ class StartTimelapseRecordingUseCase:
             )
 
             # Start recording
-            success = self.camera_control_service.start_timelapse_recording(parameters)
+            success = await self.camera_control_service.start_timelapse_recording(
+                parameters
+            )
 
             if success:
                 return StartTimelapseRecordingResponse(
@@ -123,11 +125,11 @@ class ShootCameraUseCase:
     def __init__(self, camera_control_service: CameraControlService):
         self.camera_control_service = camera_control_service
 
-    def execute(self, request: ShootCameraRequest) -> ShootCameraResponse:
+    async def execute(self, request: ShootCameraRequest) -> ShootCameraResponse:
         """Execute the use case."""
         try:
             # Check if camera is connected
-            if not self.camera_control_service.is_camera_connected():
+            if not await self.camera_control_service.is_camera_connected():
                 return ShootCameraResponse(
                     success=False,
                     message="Camera is not connected",
@@ -143,7 +145,7 @@ class ShootCameraUseCase:
             )
 
             # Shoot camera
-            result = self.camera_control_service.shoot_camera(parameters)
+            result = await self.camera_control_service.shoot_camera(parameters)
 
             return ShootCameraResponse(
                 success=result.success,
@@ -165,10 +167,10 @@ class GetCameraStatusUseCase:
     def __init__(self, camera_control_service: CameraControlService):
         self.camera_control_service = camera_control_service
 
-    def execute(self) -> GetCameraStatusResponse:
+    async def execute(self) -> GetCameraStatusResponse:
         """Execute the use case."""
         try:
-            camera_status = self.camera_control_service.get_camera_status()
+            camera_status = await self.camera_control_service.get_camera_status()
             return GetCameraStatusResponse(camera_status=camera_status)
         except Exception:
             # Return a default status with error indication

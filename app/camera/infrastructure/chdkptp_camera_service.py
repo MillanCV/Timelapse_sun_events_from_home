@@ -34,7 +34,8 @@ class CHDKPTPScriptGenerator(TimelapseScriptGenerator):
         """Generate CHDKPTP script for timelapse recording."""
         script_content = f"""rec
 clock -sync
-rs "{parameters.output_directory}" -shots={parameters.shots} -int={parameters.interval_seconds}
+rs "{parameters.output_directory}" -shots={parameters.shots} \
+-int={parameters.interval_seconds}
 play
 dis
 """
@@ -55,7 +56,7 @@ class CHDKPTPCameraService(CameraControlService):
     def __init__(
         self,
         script_generator: CHDKPTPScriptGenerator,
-        chdkptp_location: str = "/home/arrumada/Dev/CanonCameraControl/ChdkPTP",
+        chdkptp_location: str = ("/home/arrumada/Dev/CanonCameraControl/ChdkPTP"),
         output_directory: str = "/home/arrumada/Images",
     ):
         self.script_generator = script_generator
@@ -108,7 +109,9 @@ class CHDKPTPCameraService(CameraControlService):
 
                 return CameraShootingResult(
                     success=True,
-                    message=f"Camera shooting completed with {len(image_paths)} images",
+                    message=(
+                        f"Camera shooting completed with {len(image_paths)} images"
+                    ),
                     shooting_id=shooting_id,
                     image_paths=image_paths,
                     timestamp=datetime.now(),
@@ -207,7 +210,7 @@ class CHDKPTPCameraService(CameraControlService):
             return CameraStatus(
                 is_connected=is_connected,
                 is_recording=self._current_recording is not None,
-                current_mode="timelapse" if self._current_recording else "idle",
+                current_mode=("timelapse" if self._current_recording else "idle"),
                 battery_level=None,  # Could be implemented with CHDKPTP commands
                 storage_available=None,  # Could be implemented with CHDKPTP commands
             )
