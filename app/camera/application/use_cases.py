@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from ..domain.entities import (
     CameraStatus,
@@ -49,6 +49,7 @@ class ShootCameraResponse:
     success: bool
     message: str
     shooting_id: Optional[str] = None
+    image_paths: List[str] = None
 
 
 @dataclass
@@ -142,20 +143,14 @@ class ShootCameraUseCase:
             )
 
             # Shoot camera
-            success = self.camera_control_service.shoot_camera(parameters)
+            result = self.camera_control_service.shoot_camera(parameters)
 
-            if success:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                return ShootCameraResponse(
-                    success=True,
-                    message=f"Camera shooting completed with {request.shots} shots",
-                    shooting_id=f"shooting_{timestamp}",
-                )
-            else:
-                return ShootCameraResponse(
-                    success=False,
-                    message="Failed to shoot camera",
-                )
+            return ShootCameraResponse(
+                success=result.success,
+                message=result.message,
+                shooting_id=result.shooting_id,
+                image_paths=result.image_paths,
+            )
 
         except Exception as e:
             return ShootCameraResponse(

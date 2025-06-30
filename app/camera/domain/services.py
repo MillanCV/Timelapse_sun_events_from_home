@@ -4,6 +4,7 @@ from .entities import (
     CameraStatus,
     TimelapseRecordingParameters,
     CameraShootingParameters,
+    CameraShootingResult,
 )
 
 
@@ -18,7 +19,9 @@ class CameraControlService(ABC):
         pass
 
     @abstractmethod
-    async def shoot_camera(self, parameters: CameraShootingParameters) -> bool:
+    async def shoot_camera(
+        self, parameters: CameraShootingParameters
+    ) -> CameraShootingResult:
         """Shoot camera with given parameters."""
         pass
 

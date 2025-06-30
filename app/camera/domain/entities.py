@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 
 @dataclass
@@ -24,6 +24,17 @@ class CameraShootingParameters:
     iso_value: int  # ISO value
     shots: int  # Number of shots
     interval: float  # Interval time between shots
+
+
+@dataclass
+class CameraShootingResult:
+    """Domain entity for camera shooting results."""
+
+    success: bool
+    message: str
+    shooting_id: Optional[str] = None
+    image_paths: List[str] = None
+    timestamp: datetime = None
 
 
 @dataclass
