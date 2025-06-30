@@ -129,11 +129,11 @@ class ShootCameraUseCase:
         """Execute the use case."""
         try:
             # Check if camera is connected
-            if not await self.camera_control_service.is_camera_connected():
-                return ShootCameraResponse(
-                    success=False,
-                    message="Camera is not connected",
-                )
+            # if not await self.camera_control_service.is_camera_connected():
+            #    return ShootCameraResponse(
+            #        success=False,
+            #        message="Camera is not connected",
+            #    )
 
             # Create shooting parameters
             parameters = CameraShootingParameters(

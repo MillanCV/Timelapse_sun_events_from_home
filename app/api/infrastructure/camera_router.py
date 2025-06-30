@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from fastapi.responses import FileResponse
 import os
+import logging
 
 from ...camera.application.use_cases import (
     ShootCameraRequest,
@@ -237,19 +238,26 @@ def create_camera_router() -> APIRouter:
     @router.post("/test-shoot")
     async def test_camera_shoot():
         """Test endpoint to verify camera functionality with minimal parameters."""
-        try:
-            # Use minimal test parameters
-            response = await shoot_camera_use_case.execute(
-                ShootCameraRequest(
-                    subject_distance=1.0,  # 1 meter
-                    speed=1.0 / 60.0,  # 1/60 second
-                    iso_value=100,  # ISO 100
-                    shots=1,  # Just 1 shot
-                    interval=1.0,  # 1 second interval
-                )
-            )
+        logger = logging.getLogger(__name__)
+        logger.info("🚀 Test-shoot endpoint called")
 
-            return {
+        try:
+            logger.info("🚀 Creating test camera request...")
+            # Use minimal test parameters
+            request = ShootCameraRequest(
+                subject_distance=1.0,  # 1 meter
+                speed=1.0 / 60.0,  # 1/60 second
+                iso_value=100,  # ISO 100
+                shots=1,  # Just 1 shot
+                interval=1.0,  # 1 second interval
+            )
+            logger.info(f"🚀 Test request created: {request}")
+
+            logger.info("🚀 Executing shoot camera use case...")
+            response = await shoot_camera_use_case.execute(request)
+            logger.info(f"🚀 Use case response: {response}")
+
+            result = {
                 "success": response.success,
                 "message": response.message,
                 "shooting_id": response.shooting_id,
@@ -262,7 +270,10 @@ def create_camera_router() -> APIRouter:
                     "interval": 1.0,
                 },
             }
+            logger.info(f"🚀 Returning result: {result}")
+            return result
         except Exception as e:
+            logger.error(f"🚀 Error in test-shoot endpoint: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
     return router

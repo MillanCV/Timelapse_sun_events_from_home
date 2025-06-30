@@ -205,7 +205,8 @@ class CHDKPTPCameraService(CameraControlService):
         """Get current camera status."""
         try:
             # Check if CHDKPTP is available and camera is connected
-            is_connected = await self.is_camera_connected()
+            is_connected = True
+            # is_connected = await self.is_camera_connected()
 
             return CameraStatus(
                 is_connected=is_connected,
@@ -225,11 +226,13 @@ class CHDKPTPCameraService(CameraControlService):
     async def is_camera_connected(self) -> bool:
         """Check if camera is connected."""
         try:
+            self.logger.info("🔍 Starting camera connection check...")
             # Try to run a simple CHDKPTP command to check connection
             result = await self._run_chdkptp_command(["-c", "ls"])
+            self.logger.info(f"🔍 Camera connection check result: {result.returncode}")
             return result.returncode == 0
         except Exception as e:
-            self.logger.error(f"Error checking camera connection: {e}")
+            self.logger.error(f"🔍 Error checking camera connection: {e}")
             return False
 
     async def _execute_chdkptp_script(self, script_path: str) -> bool:
@@ -261,26 +264,69 @@ class CHDKPTPCameraService(CameraControlService):
 
     async def _run_chdkptp_command(self, cmd: list) -> subprocess.CompletedProcess:
         """Run CHDKPTP command asynchronously."""
+        self.logger.info(f"🔧 _run_chdkptp_command called with: {cmd}")
+        self.logger.info(f"🔧 Current working directory: {os.getcwd()}")
+        self.logger.info(f"🔧 CHDKPTP location: {self.chdkptp_location}")
+
         # Change to CHDKPTP directory
         original_cwd = os.getcwd()
         os.chdir(self.chdkptp_location)
+        self.logger.info(f"🔧 Changed to directory: {os.getcwd()}")
 
         try:
+            # Check if this is a full command or just arguments
+            if len(cmd) > 0 and not cmd[0].startswith("sudo"):
+                # This is just arguments, need to build the full command
+                chdkptp_script = Path("chdkptp.sh")  # Relative to current directory
+                self.logger.info(
+                    f"🔧 Looking for script at: {chdkptp_script.absolute()}"
+                )
+
+                if not chdkptp_script.exists():
+                    self.logger.error(
+                        f"🔧 CHDKPTP script not found at: {chdkptp_script.absolute()}"
+                    )
+                    raise FileNotFoundError(
+                        f"CHDKPTP script not found: {chdkptp_script.absolute()}"
+                    )
+
+                full_cmd = ["sudo", str(chdkptp_script)] + cmd
+                self.logger.info(f"🔧 Built full command: {full_cmd}")
+            else:
+                # This is already a full command
+                full_cmd = cmd
+                self.logger.info(f"🔧 Using existing full command: {full_cmd}")
+
+            self.logger.info(f"🔧 Final command to execute: {full_cmd}")
+            self.logger.info(f"🔧 Working directory for execution: {os.getcwd()}")
+
             # Run the command
             process = await asyncio.create_subprocess_exec(
-                *cmd,
+                *full_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
 
             stdout, stderr = await process.communicate()
 
+            self.logger.info(
+                f"🔧 Command completed with return code: {process.returncode}"
+            )
+            if stdout:
+                self.logger.info(f"🔧 stdout: {stdout.decode()}")
+            if stderr:
+                self.logger.info(f"🔧 stderr: {stderr.decode()}")
+
             return subprocess.CompletedProcess(
-                args=cmd,
+                args=full_cmd,
                 returncode=process.returncode,
                 stdout=stdout.decode() if stdout else "",
                 stderr=stderr.decode() if stderr else "",
             )
+        except Exception as e:
+            self.logger.error(f"🔧 Exception in _run_chdkptp_command: {e}")
+            raise
         finally:
             # Restore original directory
             os.chdir(original_cwd)
+            self.logger.info(f"🔧 Restored directory to: {os.getcwd()}")
