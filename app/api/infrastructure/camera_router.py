@@ -67,9 +67,9 @@ def create_camera_router() -> APIRouter:
     shoot_camera_use_case = ShootCameraUseCase(camera_service)
     execute_command_use_case = ExecuteCommandUseCase(camera_service)
 
-    @router.post("/shoot", response_model=ShootCameraResponseModel)
+    @router.post("/quick-shoot", response_model=ShootCameraResponseModel)
     async def shoot_camera():
-        """Shoot camera and return the image path."""
+        """Shoot camera in auto mode."""
         try:
             response = await shoot_camera_use_case.execute()
 
