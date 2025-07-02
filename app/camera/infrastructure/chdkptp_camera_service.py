@@ -361,10 +361,13 @@ class CHDKPTPCameraService(CameraControlService):
 
             # Read PPM file
             image = cv2.imread(str(self._frame_path))
-            if image is None:
+
+            # Check if image was loaded successfully (numpy array with valid shape)
+            if image is None or image.size == 0:
                 self.logger.warning("Could not read PPM image")
                 return None
 
+            self.logger.info(f"📸 PPM image loaded successfully, shape: {image.shape}")
             return image
 
         except Exception as e:
