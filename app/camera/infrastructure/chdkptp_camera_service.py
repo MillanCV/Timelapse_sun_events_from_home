@@ -138,29 +138,67 @@ class CHDKPTPCameraService(CameraControlService):
     ) -> LiveViewResult:
         """Take a live view snapshot and return the image data."""
         try:
-            self.logger.info("Taking live view snapshot...")
+            self.logger.info("📸 Starting live view snapshot...")
+            self.logger.info(f"📸 CHDKPTP location: {self.chdkptp_location}")
+            self.logger.info(f"📸 Frame path: {self._frame_path}")
 
-            # Build CHDKPTP command for live view snapshot
+            # Build CHDKPTP command using the same pattern as shoot_camera
+            chdkptp_script = self.chdkptp_location / "chdkptp.sh"
+            self.logger.info(f"📸 Looking for script at: {chdkptp_script}")
+
+            if not chdkptp_script.exists():
+                self.logger.error(f"📸 CHDKPTP script not found: {chdkptp_script}")
+                return LiveViewResult(
+                    success=False,
+                    message="CHDKPTP script not found",
+                    image_data=None,
+                    image_format=None,
+                    timestamp=datetime.now(),
+                )
+
+            self.logger.info("📸 CHDKPTP script found, building command...")
+
+            # Build command with proper structure (ignore overlay parameter)
             cmd = [
+                "sudo",
+                str(chdkptp_script),
                 "-c",  # connect
                 "-erec",  # switch to record mode
+                "-e",
+                "lvdumpimg -vp=frame.ppm -count=1",  # live view dump
             ]
 
-            if include_overlay:
-                cmd.extend(["-e", "lvdumpimg -vp=frame.ppm -bm=overlay.pam -count=1"])
-            else:
-                cmd.extend(["-e", "lvdumpimg -vp=frame.ppm -count=1"])
+            self.logger.info(f"📸 Built command: {cmd}")
+            self.logger.info("📸 Executing live view command...")
 
             # Execute the command
             result = await self._run_chdkptp_command(cmd)
 
+            self.logger.info(
+                f"📸 Command completed with return code: {result.returncode}"
+            )
+            if result.stdout:
+                self.logger.info(f"📸 Command stdout: {result.stdout}")
+            if result.stderr:
+                self.logger.info(f"📸 Command stderr: {result.stderr}")
+
             if result.returncode == 0:
+                self.logger.info("📸 Command successful, reading PPM image...")
+
                 # Read the PPM image
                 image_data = await self._read_ppm_image()
 
                 if image_data:
+                    self.logger.info(
+                        f"📸 PPM image read successfully, shape: {image_data.shape}"
+                    )
+
                     # Convert to JPEG
+                    self.logger.info("📸 Converting to JPEG...")
                     jpeg_data = await self._convert_to_jpeg(image_data)
+                    self.logger.info(
+                        f"📸 JPEG conversion successful, size: {len(jpeg_data)} bytes"
+                    )
 
                     return LiveViewResult(
                         success=True,
@@ -170,6 +208,7 @@ class CHDKPTPCameraService(CameraControlService):
                         timestamp=datetime.now(),
                     )
                 else:
+                    self.logger.error("📸 Failed to read PPM image data")
                     return LiveViewResult(
                         success=False,
                         message="Failed to read PPM image data",
@@ -178,6 +217,7 @@ class CHDKPTPCameraService(CameraControlService):
                         timestamp=datetime.now(),
                     )
             else:
+                self.logger.error(f"📸 Live view command failed: {result.stderr}")
                 return LiveViewResult(
                     success=False,
                     message=f"Live view snapshot failed: {result.stderr}",
@@ -187,7 +227,7 @@ class CHDKPTPCameraService(CameraControlService):
                 )
 
         except Exception as e:
-            self.logger.error(f"Error taking live view snapshot: {e}")
+            self.logger.error(f"📸 Error taking live view snapshot: {e}")
             return LiveViewResult(
                 success=False,
                 message=f"Error taking live view snapshot: {str(e)}",
@@ -201,12 +241,51 @@ class CHDKPTPCameraService(CameraControlService):
     ) -> AsyncGenerator[LiveViewResult, None]:
         """Start a live view stream and yield image frames."""
         try:
-            self.logger.info("Starting live view stream...")
+            self.logger.info("🎥 Starting live view stream...")
+            self.logger.info(
+                f"🎥 Stream config: fps={config.fps}, quality={config.quality}"
+            )
+            self.logger.info(f"🎥 CHDKPTP location: {self.chdkptp_location}")
             self._streaming = True
 
-            # Connect to camera
-            connect_result = await self._run_chdkptp_command(["-c", "-erec"])
+            # Build CHDKPTP command using the same pattern as shoot_camera
+            chdkptp_script = self.chdkptp_location / "chdkptp.sh"
+            self.logger.info(f"🎥 Looking for script at: {chdkptp_script}")
+
+            if not chdkptp_script.exists():
+                self.logger.error(f"🎥 CHDKPTP script not found: {chdkptp_script}")
+                yield LiveViewResult(
+                    success=False,
+                    message="CHDKPTP script not found",
+                    image_data=None,
+                    image_format=None,
+                    timestamp=datetime.now(),
+                )
+                return
+
+            self.logger.info("🎥 CHDKPTP script found, connecting to camera...")
+
+            # Connect to camera using proper command structure
+            connect_cmd = [
+                "sudo",
+                str(chdkptp_script),
+                "-c",  # connect
+                "-erec",  # switch to record mode
+            ]
+
+            self.logger.info(f"🎥 Connect command: {connect_cmd}")
+            connect_result = await self._run_chdkptp_command(connect_cmd)
+
+            self.logger.info(
+                f"🎥 Connect result: returncode={connect_result.returncode}"
+            )
+            if connect_result.stdout:
+                self.logger.info(f"🎥 Connect stdout: {connect_result.stdout}")
+            if connect_result.stderr:
+                self.logger.info(f"🎥 Connect stderr: {connect_result.stderr}")
+
             if connect_result.returncode != 0:
+                self.logger.error("🎥 Failed to connect to camera for live view")
                 yield LiveViewResult(
                     success=False,
                     message="Failed to connect to camera for live view",
@@ -216,25 +295,40 @@ class CHDKPTPCameraService(CameraControlService):
                 )
                 return
 
+            self.logger.info(
+                "🎥 Successfully connected to camera, starting stream loop..."
+            )
+            frame_count = 0
+
             while self._streaming:
                 try:
-                    # Take snapshot
+                    frame_count += 1
+                    self.logger.info(f"🎥 Taking frame {frame_count}...")
+
+                    # Take snapshot (ignore overlay parameter)
                     snapshot_result = await self.take_live_view_snapshot(
-                        include_overlay=config.include_overlay
+                        include_overlay=False
                     )
 
                     if snapshot_result.success:
+                        self.logger.info(
+                            f"🎥 Frame {frame_count} captured successfully"
+                        )
                         yield snapshot_result
                     else:
                         self.logger.warning(
-                            f"Snapshot failed: {snapshot_result.message}"
+                            f"🎥 Frame {frame_count} failed: {snapshot_result.message}"
                         )
 
                     # Wait for next frame
-                    await asyncio.sleep(1.0 / config.fps)
+                    frame_interval = 1.0 / config.fps
+                    self.logger.info(f"🎥 Waiting {frame_interval}s for next frame...")
+                    await asyncio.sleep(frame_interval)
 
                 except Exception as e:
-                    self.logger.error(f"Error in live view stream: {e}")
+                    self.logger.error(
+                        f"🎥 Error in live view stream frame {frame_count}: {e}"
+                    )
                     yield LiveViewResult(
                         success=False,
                         message=f"Stream error: {str(e)}",
@@ -245,7 +339,7 @@ class CHDKPTPCameraService(CameraControlService):
                     break
 
         except Exception as e:
-            self.logger.error(f"Error starting live view stream: {e}")
+            self.logger.error(f"🎥 Error starting live view stream: {e}")
             yield LiveViewResult(
                 success=False,
                 message=f"Error starting live view stream: {str(e)}",
@@ -255,7 +349,7 @@ class CHDKPTPCameraService(CameraControlService):
             )
         finally:
             self._streaming = False
-            self.logger.info("Live view stream stopped")
+            self.logger.info("🎥 Live view stream stopped")
 
     async def stop_live_view_stream(self) -> None:
         """Stop the live view stream."""
