@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize camera services
     camera_service = CHDKPTPCameraService()
+    await camera_service.initialize()  # Initialize command manager
 
     # Initialize video processor
     video_processor = FFmpegVideoProcessor()
@@ -84,6 +85,9 @@ async def lifespan(app: FastAPI):
 
     if monitor_thread and monitor_thread.is_alive():
         monitor_thread.join(timeout=5)
+
+    # Shutdown camera service
+    await camera_service.shutdown()
 
     logging.info("Application shutdown complete")
 
