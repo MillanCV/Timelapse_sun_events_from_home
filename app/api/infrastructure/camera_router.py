@@ -32,7 +32,7 @@ class ShootCameraResponseModel(BaseModel):
     success: bool
     message: str
     shooting_id: Optional[str] = None
-    image_paths: List[str] = []
+    image_path: Optional[str] = None
 
 
 class CameraStatusResponseModel(BaseModel):
@@ -89,7 +89,7 @@ def create_camera_router() -> APIRouter:
                 success=response.success,
                 message=response.message,
                 shooting_id=response.shooting_id,
-                image_paths=response.image_paths,
+                image_path=response.image_path,
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
@@ -254,6 +254,7 @@ def create_camera_router() -> APIRouter:
             logger.info(f"🚀 Test request created: {request}")
 
             logger.info("🚀 Executing shoot camera use case...")
+            
             response = await shoot_camera_use_case.execute(request)
             logger.info(f"🚀 Use case response: {response}")
 
@@ -261,7 +262,7 @@ def create_camera_router() -> APIRouter:
                 "success": response.success,
                 "message": response.message,
                 "shooting_id": response.shooting_id,
-                "image_paths": response.image_paths,
+                "image_path": response.image_path,
                 "test_parameters": {
                     "subject_distance": 1.0,
                     "speed": "1/60s",
@@ -270,10 +271,19 @@ def create_camera_router() -> APIRouter:
                     "interval": 1.0,
                 },
             }
-            logger.info(f"🚀 Returning result: {result}")
-            return result
+            # logger.info(f"🚀 Returning result: {result}")
+            # return result
+            path_to_image = result["image_path"]
+            logger.info(f"🚀 path_to_image: {path_to_image}")
+
+            if not os.path.exists(path_to_image):
+                raise HTTPException(status_code=404, detail="Image not found")
+
+            return FileResponse(path_to_image)
+            
         except Exception as e:
             logger.error(f"🚀 Error in test-shoot endpoint: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
     return router
+

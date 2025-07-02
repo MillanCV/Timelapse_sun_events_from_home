@@ -81,7 +81,7 @@ class CHDKPTPCameraService(CameraControlService):
                     success=False,
                     message="CHDKPTP script not found",
                     shooting_id=None,
-                    image_paths=[],
+                    image_path=None,
                     timestamp=datetime.now(),
                 )
 
@@ -104,16 +104,18 @@ class CHDKPTPCameraService(CameraControlService):
                 self.logger.info("Camera shooting completed successfully")
 
                 # Get the latest image from the output directory
-                image_paths = self._get_latest_images()
+                image_path = self._get_latest_image()
                 shooting_id = f"shooting_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+                self.logger.info(f"shoot_camera, image_path: {image_path}")
 
                 return CameraShootingResult(
                     success=True,
                     message=(
-                        f"Camera shooting completed with {len(image_paths)} images"
+                        f"Camera shooting completed "
                     ),
                     shooting_id=shooting_id,
-                    image_paths=image_paths,
+                    image_path=image_path,
                     timestamp=datetime.now(),
                 )
             else:
@@ -122,7 +124,7 @@ class CHDKPTPCameraService(CameraControlService):
                     success=False,
                     message=f"Camera shooting failed: {result.stderr}",
                     shooting_id=None,
-                    image_paths=[],
+                    image_path=None,
                     timestamp=datetime.now(),
                 )
 
@@ -132,7 +134,7 @@ class CHDKPTPCameraService(CameraControlService):
                 success=False,
                 message=f"Error shooting camera: {str(e)}",
                 shooting_id=None,
-                image_paths=[],
+                image_path=None,
                 timestamp=datetime.now(),
             )
 
@@ -155,6 +157,32 @@ class CHDKPTPCameraService(CameraControlService):
 
                 # Return the most recent image (or a few if multiple shots)
                 return image_paths[:5]  # Return up to 5 most recent images
+
+            return []
+        except Exception as e:
+            self.logger.error(f"Error getting latest images: {e}")
+            return []
+        
+    def _get_latest_image(self) -> str:
+        """Get the latest image from the output directory."""
+        try:
+            # Look for common image extensions
+            image_extensions = [".jpg", ".jpeg", ".cr2", ".raw"]
+            image_paths = []
+
+            # Get all files in the output directory
+            if self.output_directory.exists():
+                for ext in image_extensions:
+                    image_paths.extend(
+                        [str(f) for f in self.output_directory.glob(f"*{ext}")]
+                    )
+
+                # Sort by modification time (newest first) and return the latest
+                image_paths.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+
+                # Return the most recent image (or a few if multiple shots)
+                self.logger.error(f"_get_latest_image: {image_paths}")
+                return image_paths[0]  # Return up to 5 most recent images
 
             return []
         except Exception as e:

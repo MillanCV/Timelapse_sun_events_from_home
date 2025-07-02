@@ -49,7 +49,7 @@ class ShootCameraResponse:
     success: bool
     message: str
     shooting_id: Optional[str] = None
-    image_paths: List[str] = None
+    image_path: Optional[str] = None
 
 
 @dataclass
@@ -151,7 +151,7 @@ class ShootCameraUseCase:
                 success=result.success,
                 message=result.message,
                 shooting_id=result.shooting_id,
-                image_paths=result.image_paths,
+                image_path=result.image_path,
             )
 
         except Exception as e:
