@@ -116,8 +116,14 @@ def create_camera_router() -> APIRouter:
             if not os.path.exists(image_path):
                 raise HTTPException(status_code=404, detail="Image file not found")
 
+            # Extract filename for the download
+            filename = os.path.basename(image_path)
+
             # Return the image file directly
-            return FileResponse(image_path)
+            return FileResponse(
+                image_path,
+                headers={"Content-Disposition": f"inline; filename={filename}"},
+            )
 
         except HTTPException:
             # Re-raise HTTP exceptions as-is
