@@ -2,11 +2,18 @@ import asyncio
 import logging
 import os
 import subprocess
+import cv2
+import numpy as np
 from pathlib import Path
-from typing import Optional
+from typing import Optional, AsyncGenerator
 from datetime import datetime
 
-from ..domain.entities import CameraShootingResult, CameraCommand
+from ..domain.entities import (
+    CameraShootingResult,
+    CameraCommand,
+    LiveViewResult,
+    LiveViewStream,
+)
 from ..domain.services import CameraControlService
 
 
@@ -21,6 +28,8 @@ class CHDKPTPCameraService(CameraControlService):
         self.chdkptp_location = Path(chdkptp_location)
         self.output_directory = Path(output_directory)
         self.logger = logging.getLogger(__name__)
+        self._streaming = False
+        self._frame_path = self.chdkptp_location / "frame.ppm"
 
     async def shoot_camera(self) -> CameraShootingResult:
         """Shoot camera and return the result with image path."""
@@ -123,6 +132,170 @@ class CHDKPTPCameraService(CameraControlService):
                 image_path=None,
                 timestamp=datetime.now(),
             )
+
+    async def take_live_view_snapshot(
+        self, include_overlay: bool = True
+    ) -> LiveViewResult:
+        """Take a live view snapshot and return the image data."""
+        try:
+            self.logger.info("Taking live view snapshot...")
+
+            # Build CHDKPTP command for live view snapshot
+            cmd = [
+                "-c",  # connect
+                "-erec",  # switch to record mode
+            ]
+
+            if include_overlay:
+                cmd.extend(["-e", "lvdumpimg -vp=frame.ppm -bm=overlay.pam -count=1"])
+            else:
+                cmd.extend(["-e", "lvdumpimg -vp=frame.ppm -count=1"])
+
+            # Execute the command
+            result = await self._run_chdkptp_command(cmd)
+
+            if result.returncode == 0:
+                # Read the PPM image
+                image_data = await self._read_ppm_image()
+
+                if image_data:
+                    # Convert to JPEG
+                    jpeg_data = await self._convert_to_jpeg(image_data)
+
+                    return LiveViewResult(
+                        success=True,
+                        message="Live view snapshot captured successfully",
+                        image_data=jpeg_data,
+                        image_format="jpeg",
+                        timestamp=datetime.now(),
+                    )
+                else:
+                    return LiveViewResult(
+                        success=False,
+                        message="Failed to read PPM image data",
+                        image_data=None,
+                        image_format=None,
+                        timestamp=datetime.now(),
+                    )
+            else:
+                return LiveViewResult(
+                    success=False,
+                    message=f"Live view snapshot failed: {result.stderr}",
+                    image_data=None,
+                    image_format=None,
+                    timestamp=datetime.now(),
+                )
+
+        except Exception as e:
+            self.logger.error(f"Error taking live view snapshot: {e}")
+            return LiveViewResult(
+                success=False,
+                message=f"Error taking live view snapshot: {str(e)}",
+                image_data=None,
+                image_format=None,
+                timestamp=datetime.now(),
+            )
+
+    async def start_live_view_stream(
+        self, config: LiveViewStream
+    ) -> AsyncGenerator[LiveViewResult, None]:
+        """Start a live view stream and yield image frames."""
+        try:
+            self.logger.info("Starting live view stream...")
+            self._streaming = True
+
+            # Connect to camera
+            connect_result = await self._run_chdkptp_command(["-c", "-erec"])
+            if connect_result.returncode != 0:
+                yield LiveViewResult(
+                    success=False,
+                    message="Failed to connect to camera for live view",
+                    image_data=None,
+                    image_format=None,
+                    timestamp=datetime.now(),
+                )
+                return
+
+            while self._streaming:
+                try:
+                    # Take snapshot
+                    snapshot_result = await self.take_live_view_snapshot(
+                        include_overlay=config.include_overlay
+                    )
+
+                    if snapshot_result.success:
+                        yield snapshot_result
+                    else:
+                        self.logger.warning(
+                            f"Snapshot failed: {snapshot_result.message}"
+                        )
+
+                    # Wait for next frame
+                    await asyncio.sleep(1.0 / config.fps)
+
+                except Exception as e:
+                    self.logger.error(f"Error in live view stream: {e}")
+                    yield LiveViewResult(
+                        success=False,
+                        message=f"Stream error: {str(e)}",
+                        image_data=None,
+                        image_format=None,
+                        timestamp=datetime.now(),
+                    )
+                    break
+
+        except Exception as e:
+            self.logger.error(f"Error starting live view stream: {e}")
+            yield LiveViewResult(
+                success=False,
+                message=f"Error starting live view stream: {str(e)}",
+                image_data=None,
+                image_format=None,
+                timestamp=datetime.now(),
+            )
+        finally:
+            self._streaming = False
+            self.logger.info("Live view stream stopped")
+
+    async def stop_live_view_stream(self) -> None:
+        """Stop the live view stream."""
+        self.logger.info("Stopping live view stream...")
+        self._streaming = False
+
+    async def _read_ppm_image(self) -> Optional[np.ndarray]:
+        """Read a PPM image from the frame file."""
+        try:
+            if not self._frame_path.exists():
+                self.logger.warning("Frame file not found")
+                return None
+
+            # Read PPM file
+            image = cv2.imread(str(self._frame_path))
+            if image is None:
+                self.logger.warning("Could not read PPM image")
+                return None
+
+            return image
+
+        except Exception as e:
+            self.logger.error(f"Error reading PPM image: {e}")
+            return None
+
+    async def _convert_to_jpeg(self, image: np.ndarray, quality: int = 80) -> bytes:
+        """Convert numpy image to JPEG bytes."""
+        try:
+            # Encode to JPEG
+            encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
+            success, jpeg_data = cv2.imencode(".jpg", image, encode_params)
+
+            if success:
+                return jpeg_data.tobytes()
+            else:
+                raise Exception("Failed to encode JPEG")
+
+        except Exception as e:
+            self.logger.error(f"Error converting to JPEG: {e}")
+            raise
 
     async def _execute_auto_shoot(self, parameters: dict) -> CameraShootingResult:
         """Execute automatic shooting with parameters."""

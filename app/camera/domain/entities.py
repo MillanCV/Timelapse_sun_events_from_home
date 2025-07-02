@@ -32,3 +32,24 @@ class CameraStatus:
     current_mode: Optional[str] = None
     battery_level: Optional[int] = None
     storage_available: Optional[int] = None  # in MB
+
+
+@dataclass
+class LiveViewResult:
+    """Domain entity for live view results."""
+
+    success: bool
+    message: str
+    image_data: Optional[bytes] = None
+    image_format: Optional[str] = None  # "jpeg", "ppm", etc.
+    timestamp: datetime = None
+
+
+@dataclass
+class LiveViewStream:
+    """Domain entity for live view stream configuration."""
+
+    fps: int = 5  # frames per second
+    quality: int = 80  # JPEG quality (1-100)
+    resolution: Optional[tuple[int, int]] = None  # (width, height)
+    include_overlay: bool = True  # Include camera overlay
