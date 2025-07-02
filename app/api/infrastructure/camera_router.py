@@ -112,18 +112,19 @@ def create_camera_router() -> APIRouter:
             if not image_path:
                 raise HTTPException(status_code=404, detail="No pictures found")
 
-            # Construct the full path to the image
-            full_path = f"/home/arrumada/Images/{image_path}"
-
-            if not os.path.exists(full_path):
+            # The image_path is already the full path, no need to construct it
+            if not os.path.exists(image_path):
                 raise HTTPException(status_code=404, detail="Image file not found")
+
+            # Extract filename for the download
+            filename = os.path.basename(image_path)
 
             # Return the image file directly
             return FileResponse(
-                full_path,
+                image_path,
                 # Adjust based on actual image format
                 media_type="image/jpeg",
-                filename=image_path,
+                filename=filename,
             )
 
         except HTTPException:
