@@ -164,8 +164,7 @@ class CHDKPTPCameraService(CameraControlService):
                 str(chdkptp_script),
                 "-c",  # connect
                 "-erec",  # switch to record mode
-                "-e",
-                "lvdumpimg -vp=frame.ppm -count=1",  # live view dump
+                "-elvdumpimg -vp=frame.ppm -count=1",  # live view dump
             ]
 
             self.logger.info(f"📸 Built command: {cmd}")
