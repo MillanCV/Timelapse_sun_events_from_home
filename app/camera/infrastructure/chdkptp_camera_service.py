@@ -434,17 +434,17 @@ class CHDKPTPCameraService(CameraControlService):
             # Check if this is a full command or just arguments
             if len(cmd) > 0 and not cmd[0].startswith("sudo"):
                 # This is just arguments, need to build the full command
-                chdkptp_script = Path("chdkptp.sh")  # Relative to current directory
-                self.logger.info(
-                    f"🔧 Looking for script at: {chdkptp_script.absolute()}"
-                )
+                chdkptp_script = (
+                    self.chdkptp_location / "chdkptp.sh"
+                )  # Use absolute path
+                self.logger.info(f"🔧 Looking for script at: {chdkptp_script}")
 
                 if not chdkptp_script.exists():
                     self.logger.error(
-                        f"🔧 CHDKPTP script not found at: {chdkptp_script.absolute()}"
+                        f"🔧 CHDKPTP script not found at: {chdkptp_script}"
                     )
                     raise FileNotFoundError(
-                        f"CHDKPTP script not found: {chdkptp_script.absolute()}"
+                        f"CHDKPTP script not found: {chdkptp_script}"
                     )
 
                 full_cmd = ["sudo", str(chdkptp_script)] + cmd
