@@ -106,27 +106,30 @@ def create_camera_router() -> APIRouter:
     async def get_last_picture():
         """Get the last picture taken by the camera as a file download."""
         try:
-            # Get the latest image from the camera service
             image_path = camera_service._get_latest_image()
 
             if not image_path:
                 raise HTTPException(status_code=404, detail="No pictures found")
 
-            # The image_path is already the full path, no need to construct it
             if not os.path.exists(image_path):
                 raise HTTPException(status_code=404, detail="Image file not found")
 
-            # Extract filename for the download
             filename = os.path.basename(image_path)
+            file_size = os.path.getsize(image_path)
+            modified_time = datetime.fromtimestamp(
+                os.path.getmtime(image_path)
+            ).isoformat()
 
-            # Return the image file directly
-            return FileResponse(
-                image_path,
-                headers={"Content-Disposition": f"inline; filename={filename}"},
-            )
+            headers = {
+                "Content-Disposition": f"inline; filename={filename}",
+                "X-Filename": filename,
+                "X-File-Size": str(file_size),
+                "X-Modified-Time": modified_time,
+                "X-Image-Path": image_path,
+            }
 
+            return FileResponse(image_path, headers=headers)
         except HTTPException:
-            # Re-raise HTTP exceptions as-is
             raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
