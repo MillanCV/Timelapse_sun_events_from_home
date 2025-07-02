@@ -204,6 +204,53 @@ def create_camera_router() -> APIRouter:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
+    @router.get("/snapshot")
+    async def take_snapshot():
+        """Take a snapshot with viewfinder frame."""
+        try:
+            import subprocess
+            import cv2
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.info("Taking snapshot with viewfinder frame...")
+
+            # Get CHDKPTP paths from camera service
+            chdkptp_script = str(camera_service.chdkptp_location / "chdkptp.sh")
+            chdkptp_dir = str(camera_service.chdkptp_location)
+            frame_path = str(camera_service._frame_path)
+
+            subprocess.run(
+                [
+                    "sudo",
+                    chdkptp_script,
+                    "-c",
+                    "-e",
+                    "rec",
+                    "-e",
+                    "lvdumpimg -vp=frame.ppm -bm=overlay.pam -count=1",
+                ],
+                cwd=chdkptp_dir,
+                check=True,
+            )
+
+            image = cv2.imread(frame_path)
+            if image is None:
+                logger.error("Could not read frame.ppm")
+                raise HTTPException(status_code=500, detail="Snapshot failed")
+
+            _, buffer = cv2.imencode(".jpg", image)
+            jpg_io = io.BytesIO(buffer.tobytes())
+
+            logger.info("Snapshot captured and converted to JPEG.")
+            return StreamingResponse(jpg_io, media_type="image/jpeg")
+
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Snapshot command failed: {e}")
+            raise HTTPException(status_code=500, detail="Snapshot command failed.")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
     @router.post("/live-view/stop")
     async def stop_live_view_stream():
         """Stop the live view stream."""
