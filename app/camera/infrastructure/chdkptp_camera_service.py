@@ -242,9 +242,6 @@ class CHDKPTPCameraService(CameraControlService):
         """Start a live view stream and yield image frames."""
         try:
             self.logger.info("🎥 Starting live view stream...")
-            self.logger.info(
-                f"🎥 Stream config: fps={config.fps}, quality={config.quality}"
-            )
             self.logger.info(f"🎥 CHDKPTP location: {self.chdkptp_location}")
             self._streaming = True
 
@@ -305,7 +302,7 @@ class CHDKPTPCameraService(CameraControlService):
                     frame_count += 1
                     self.logger.info(f"🎥 Taking frame {frame_count}...")
 
-                    # Take snapshot (ignore overlay parameter)
+                    # Take snapshot (no overlay)
                     snapshot_result = await self.take_live_view_snapshot(
                         include_overlay=False
                     )
@@ -320,8 +317,8 @@ class CHDKPTPCameraService(CameraControlService):
                             f"🎥 Frame {frame_count} failed: {snapshot_result.message}"
                         )
 
-                    # Wait for next frame
-                    frame_interval = 1.0 / config.fps
+                    # Wait for next frame (fixed 5 FPS)
+                    frame_interval = 0.2  # 1/5 = 0.2 seconds
                     self.logger.info(f"🎥 Waiting {frame_interval}s for next frame...")
                     await asyncio.sleep(frame_interval)
 

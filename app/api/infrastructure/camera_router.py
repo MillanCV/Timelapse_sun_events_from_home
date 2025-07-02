@@ -63,20 +63,6 @@ class ListImagesResponseModel(BaseModel):
     total_count: int
 
 
-class LiveViewSnapshotRequestModel(BaseModel):
-    """Pydantic model for live view snapshot request."""
-
-    include_overlay: bool = True
-
-
-class LiveViewStreamRequestModel(BaseModel):
-    """Pydantic model for live view stream request."""
-
-    fps: int = 5
-    quality: int = 80
-    include_overlay: bool = True
-
-
 def create_camera_router() -> APIRouter:
     """Create and configure the camera router."""
     router = APIRouter(prefix="/camera", tags=["camera"])
@@ -163,11 +149,11 @@ def create_camera_router() -> APIRouter:
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.get("/live-view/snapshot")
-    async def take_live_view_snapshot(include_overlay: bool = True):
+    async def take_live_view_snapshot():
         """Take a live view snapshot."""
         try:
             response = await take_live_view_snapshot_use_case.execute(
-                TakeLiveViewSnapshotRequest(include_overlay=include_overlay)
+                TakeLiveViewSnapshotRequest(include_overlay=False)
             )
 
             if response.success and response.image_data:
@@ -185,17 +171,13 @@ def create_camera_router() -> APIRouter:
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.get("/live-view/stream")
-    async def start_live_view_stream(
-        fps: int = 5, quality: int = 80, include_overlay: bool = True
-    ):
+    async def start_live_view_stream():
         """Start a live view stream."""
         try:
 
             async def generate_stream():
                 async for result in start_live_view_stream_use_case.execute(
-                    StartLiveViewStreamRequest(
-                        fps=fps, quality=quality, include_overlay=include_overlay
-                    )
+                    StartLiveViewStreamRequest()
                 ):
                     if result.success and result.image_data:
                         yield (

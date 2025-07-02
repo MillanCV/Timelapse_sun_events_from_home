@@ -49,7 +49,5 @@ class LiveViewResult:
 class LiveViewStream:
     """Domain entity for live view stream configuration."""
 
-    fps: int = 5  # frames per second
-    quality: int = 80  # JPEG quality (1-100)
-    resolution: Optional[tuple[int, int]] = None  # (width, height)
-    include_overlay: bool = True  # Include camera overlay
+    # Simplified configuration - no parameters needed
+    pass
