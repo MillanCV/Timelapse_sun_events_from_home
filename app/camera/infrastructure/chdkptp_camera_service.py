@@ -381,7 +381,8 @@ class CHDKPTPCameraService(CameraControlService):
             encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
             success, jpeg_data = cv2.imencode(".jpg", image, encode_params)
 
-            if success:
+            # Check if encoding was successful (success is a boolean, not a numpy array)
+            if success and jpeg_data is not None:
                 return jpeg_data.tobytes()
             else:
                 raise Exception("Failed to encode JPEG")
