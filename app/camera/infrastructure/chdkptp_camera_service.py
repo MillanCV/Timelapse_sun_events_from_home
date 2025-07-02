@@ -49,7 +49,8 @@ class CHDKPTPCameraService(CameraControlService):
                     timestamp=datetime.now(),
                 )
 
-            # Use the simpler command format: connect, rec, rs, play, disconnect
+            # Use the simpler command format: connect, rec, rs, play,
+            # disconnect
             cmd = [
                 "sudo",
                 str(chdkptp_script),
@@ -189,7 +190,7 @@ class CHDKPTPCameraService(CameraControlService):
 
                 if image_data:
                     self.logger.info(
-                        f"📸 PPM image read successfully, shape: {image_data.shape}"
+                        f"📸 PPM image loaded successfully, shape: {image_data.shape}"
                     )
 
                     # Convert to JPEG
@@ -362,7 +363,8 @@ class CHDKPTPCameraService(CameraControlService):
             # Read PPM file
             image = cv2.imread(str(self._frame_path))
 
-            # Check if image was loaded successfully (numpy array with valid shape)
+            # Check if image was loaded successfully (numpy array with
+            # valid shape)
             if image is None or image.size == 0:
                 self.logger.warning("Could not read PPM image")
                 return None
@@ -381,8 +383,9 @@ class CHDKPTPCameraService(CameraControlService):
             encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
             success, jpeg_data = cv2.imencode(".jpg", image, encode_params)
 
-            # Check if encoding was successful (success is a boolean, not a numpy array)
-            if success and jpeg_data is not None:
+            # Check if encoding was successful (success is a boolean, not a
+            # numpy array)
+            if success and jpeg_data is not None and jpeg_data.size > 0:
                 return jpeg_data.tobytes()
             else:
                 raise Exception("Failed to encode JPEG")
@@ -427,7 +430,9 @@ class CHDKPTPCameraService(CameraControlService):
 
             return CameraShootingResult(
                 success=len(image_paths) > 0,
-                message=f"Auto shoot completed: {len(image_paths)}/{shots} shots taken",
+                message=(
+                    f"Auto shoot completed: {len(image_paths)}/{shots} shots taken"
+                ),
                 shooting_id=shooting_id,
                 image_path=final_image_path,
                 timestamp=datetime.now(),
@@ -471,7 +476,9 @@ class CHDKPTPCameraService(CameraControlService):
 
             return CameraShootingResult(
                 success=len(image_paths) > 0,
-                message=f"Burst shoot completed: {len(image_paths)}/{shots} shots taken",
+                message=(
+                    f"Burst shoot completed: {len(image_paths)}/{shots} shots taken"
+                ),
                 shooting_id=shooting_id,
                 image_path=final_image_path,
                 timestamp=datetime.now(),
@@ -501,7 +508,8 @@ class CHDKPTPCameraService(CameraControlService):
                         [str(f) for f in self.output_directory.glob(f"*{ext}")]
                     )
 
-                # Sort by modification time (newest first) and return the latest
+                # Sort by modification time (newest first) and return the
+                # latest
                 image_paths.sort(key=lambda x: os.path.getmtime(x), reverse=True)
 
                 # Return the most recent image
