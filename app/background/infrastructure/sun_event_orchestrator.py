@@ -1,11 +1,7 @@
 import logging
 from typing import Optional
 
-from ...camera.application.use_cases import (
-    StartTimelapseRecordingRequest,
-    StartTimelapseRecordingUseCase,
-)
-from ...camera.domain.services import CameraControlService, TimelapseScriptGenerator
+from ...camera.domain.services import CameraControlService
 from ...sun_events.domain.entities import SunEventPeriod
 from ...sun_events.domain.repositories import SunEventRepository
 from ...timelapse.application.use_cases import (
@@ -25,19 +21,12 @@ class SunEventOrchestrator:
         sun_event_repository: SunEventRepository,
         timelapse_use_case: CalculateTimelapseUseCase,
         camera_control_service: CameraControlService,
-        script_generator: TimelapseScriptGenerator,
         video_processor: FFmpegVideoProcessor,
     ):
         self.sun_event_repository = sun_event_repository
         self.timelapse_use_case = timelapse_use_case
         self.camera_control_service = camera_control_service
-        self.script_generator = script_generator
         self.video_processor = video_processor
-
-        # Initialize camera use cases
-        self.start_recording_use_case = StartTimelapseRecordingUseCase(
-            camera_control_service, script_generator
-        )
 
         self.logger = logging.getLogger(__name__)
         self._current_recording_period: Optional[SunEventPeriod] = None
@@ -110,18 +99,8 @@ class SunEventOrchestrator:
                 self.logger.warning("Camera not connected, skipping recording")
                 return
 
-            # Create recording request
-            request = StartTimelapseRecordingRequest(
-                shots=timelapse_params.photos_needed,
-                interval_seconds=timelapse_params.interval_seconds,
-                output_directory="/home/arrumada/Images",  # Could be configurable
-                period_type=period.period_type,
-                start_time=period.start_time,
-                end_time=period.end_time,
-            )
-
             # Start recording
-            response = await self.start_recording_use_case.execute(request)
+            response = await self.start_recording_use_case.execute()
 
             if response.success:
                 self.logger.info(f"📸 Camera recording started: {response.message}")
