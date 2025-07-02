@@ -396,27 +396,18 @@ class CHDKPTPCameraService(CameraControlService):
     async def _convert_to_jpeg(self, image: np.ndarray, quality: int = 80) -> bytes:
         """Convert numpy image to JPEG bytes."""
         try:
-            # Encode to JPEG
-            encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
-            success, jpeg_data = cv2.imencode(".jpg", image, encode_params)
-
-            # Debug logging
             self.logger.info(
-                f"📸 JPEG encoding - success: {success}, type: {type(success)}"
+                f"📸 Starting JPEG conversion for image shape: {image.shape}"
             )
-            self.logger.info(f"📸 JPEG encoding - jpeg_data type: {type(jpeg_data)}")
-            if jpeg_data is not None:
-                self.logger.info(
-                    f"📸 JPEG encoding - jpeg_data shape: {jpeg_data.shape}"
-                )
-                self.logger.info(f"📸 JPEG encoding - jpeg_data size: {jpeg_data.size}")
 
-            # Check if encoding was successful (success is a boolean, not a
-            # numpy array)
-            if bool(success) and jpeg_data is not None and jpeg_data.size > 0:
-                return jpeg_data.tobytes()
-            else:
-                raise Exception("Failed to encode JPEG")
+            # Use the simple working approach
+            _, buffer = cv2.imencode(".jpg", image)
+            jpeg_bytes = buffer.tobytes()
+
+            self.logger.info(
+                f"📸 JPEG conversion successful, size: {len(jpeg_bytes)} bytes"
+            )
+            return jpeg_bytes
 
         except Exception as e:
             self.logger.error(f"Error converting to JPEG: {e}")
