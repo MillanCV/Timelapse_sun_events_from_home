@@ -29,7 +29,7 @@ class CHDKPTPCameraService(CameraControlService):
         self.output_directory = Path(output_directory)
         self.logger = logging.getLogger(__name__)
         self._streaming = False
-        self._frame_path = f"{self.chdkptp_location}/frame.ppm"
+        self._frame_path = self.chdkptp_location / "frame.ppm"
 
     async def shoot_camera(self) -> CameraShootingResult:
         """Shoot camera and return the result with image path."""
@@ -361,7 +361,7 @@ class CHDKPTPCameraService(CameraControlService):
                 return None
 
             # Read PPM file
-            image = cv2.imread(self._frame_path)
+            image = cv2.imread(str(self._frame_path))
 
             # Log detailed information about the image
             self.logger.info(f"📸 cv2.imread result type: {type(image)}")
