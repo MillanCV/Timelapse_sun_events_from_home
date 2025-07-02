@@ -245,56 +245,12 @@ class CHDKPTPCameraService(CameraControlService):
             self.logger.info(f"🎥 CHDKPTP location: {self.chdkptp_location}")
             self._streaming = True
 
-            # Build CHDKPTP command using the same pattern as shoot_camera
-            chdkptp_script = self.chdkptp_location / "chdkptp.sh"
-            self.logger.info(f"🎥 Looking for script at: {chdkptp_script}")
+            # Get CHDKPTP paths
+            chdkptp_script = str(self.chdkptp_location / "chdkptp.sh")
+            chdkptp_dir = str(self.chdkptp_location)
+            frame_path = str(self._frame_path)
 
-            if not chdkptp_script.exists():
-                self.logger.error(f"🎥 CHDKPTP script not found: {chdkptp_script}")
-                yield LiveViewResult(
-                    success=False,
-                    message="CHDKPTP script not found",
-                    image_data=None,
-                    image_format=None,
-                    timestamp=datetime.now(),
-                )
-                return
-
-            self.logger.info("🎥 CHDKPTP script found, connecting to camera...")
-
-            # Connect to camera using proper command structure
-            connect_cmd = [
-                "sudo",
-                str(chdkptp_script),
-                "-c",  # connect
-                "-erec",  # switch to record mode
-            ]
-
-            self.logger.info(f"🎥 Connect command: {connect_cmd}")
-            connect_result = await self._run_chdkptp_command(connect_cmd)
-
-            self.logger.info(
-                f"🎥 Connect result: returncode={connect_result.returncode}"
-            )
-            if connect_result.stdout:
-                self.logger.info(f"🎥 Connect stdout: {connect_result.stdout}")
-            if connect_result.stderr:
-                self.logger.info(f"🎥 Connect stderr: {connect_result.stderr}")
-
-            if connect_result.returncode != 0:
-                self.logger.error("🎥 Failed to connect to camera for live view")
-                yield LiveViewResult(
-                    success=False,
-                    message="Failed to connect to camera for live view",
-                    image_data=None,
-                    image_format=None,
-                    timestamp=datetime.now(),
-                )
-                return
-
-            self.logger.info(
-                "🎥 Successfully connected to camera, starting stream loop..."
-            )
+            self.logger.info("🎥 Starting frame capture loop...")
             frame_count = 0
 
             while self._streaming:
@@ -302,26 +258,57 @@ class CHDKPTPCameraService(CameraControlService):
                     frame_count += 1
                     self.logger.info(f"🎥 Taking frame {frame_count}...")
 
-                    # Take snapshot (no overlay)
-                    snapshot_result = await self.take_live_view_snapshot(
-                        include_overlay=False
+                    # Use the proven working pattern
+                    subprocess.run(
+                        [
+                            "sudo",
+                            chdkptp_script,
+                            "-c",
+                            "-e",
+                            "lvdumpimg -vp=frame.ppm -count=1",
+                        ],
+                        cwd=chdkptp_dir,
+                        check=True,
                     )
 
-                    if snapshot_result.success:
-                        self.logger.info(
-                            f"🎥 Frame {frame_count} captured successfully"
-                        )
-                        yield snapshot_result
-                    else:
-                        self.logger.warning(
-                            f"🎥 Frame {frame_count} failed: {snapshot_result.message}"
-                        )
+                    image = cv2.imread(frame_path)
+                    if image is None:
+                        self.logger.warning("🎥 Could not read frame.ppm")
+                        continue
+
+                    ret, jpeg = cv2.imencode(".jpg", image)
+                    if not ret:
+                        self.logger.warning("🎥 Could not encode JPEG")
+                        continue
+
+                    jpeg_bytes = jpeg.tobytes()
+                    self.logger.info(
+                        f"🎥 Frame {frame_count} captured successfully, size: {len(jpeg_bytes)} bytes"
+                    )
+
+                    yield LiveViewResult(
+                        success=True,
+                        message=f"Frame {frame_count} captured",
+                        image_data=jpeg_bytes,
+                        image_format="jpeg",
+                        timestamp=datetime.now(),
+                    )
 
                     # Wait for next frame (fixed 5 FPS)
                     frame_interval = 0.2  # 1/5 = 0.2 seconds
                     self.logger.info(f"🎥 Waiting {frame_interval}s for next frame...")
                     await asyncio.sleep(frame_interval)
 
+                except subprocess.CalledProcessError as e:
+                    self.logger.error(f"🎥 Snapshot loop failed: {e}")
+                    yield LiveViewResult(
+                        success=False,
+                        message=f"Snapshot failed: {str(e)}",
+                        image_data=None,
+                        image_format=None,
+                        timestamp=datetime.now(),
+                    )
+                    break
                 except Exception as e:
                     self.logger.error(
                         f"🎥 Error in live view stream frame {frame_count}: {e}"
