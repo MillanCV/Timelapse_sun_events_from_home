@@ -188,7 +188,7 @@ class CHDKPTPCameraService(CameraControlService):
                 # Read the PPM image
                 image_data = await self._read_ppm_image()
                 print(f"📸 image_data: {image_data}")
-                if image_data:
+                if image_data is not None:
                     self.logger.info(
                         f"📸 PPM image loaded successfully, shape: {image_data.shape}"
                     )
