@@ -29,7 +29,7 @@ class CHDKPTPCameraService(CameraControlService):
         self.output_directory = Path(output_directory)
         self.logger = logging.getLogger(__name__)
         self._streaming = False
-        self._frame_path = self.chdkptp_location / "frame.ppm"
+        self._frame_path = f"{self.chdkptp_location}/frame.ppm"
 
     async def shoot_camera(self) -> CameraShootingResult:
         """Shoot camera and return the result with image path."""
@@ -361,7 +361,24 @@ class CHDKPTPCameraService(CameraControlService):
                 return None
 
             # Read PPM file
-            image = cv2.imread(str(self._frame_path))
+            image = cv2.imread(self._frame_path)
+
+            # Log detailed information about the image
+            self.logger.info(f"📸 cv2.imread result type: {type(image)}")
+            if image is not None:
+                self.logger.info(f"📸 Image shape: {image.shape}")
+                self.logger.info(f"📸 Image dtype: {image.dtype}")
+                self.logger.info(f"📸 Image size: {image.size}")
+                self.logger.info(
+                    f"📸 Image min/max values: {image.min()}/{image.max()}"
+                )
+            else:
+                self.logger.warning("📸 cv2.imread returned None")
+                self.logger.info(f"📸 Frame path exists: {self._frame_path.exists()}")
+                if self._frame_path.exists():
+                    self.logger.info(
+                        f"📸 Frame path size: {self._frame_path.stat().st_size} bytes"
+                    )
 
             # Check if image was loaded successfully (numpy array with
             # valid shape)
