@@ -1,45 +1,8 @@
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 
-from ..domain.entities import (
-    CameraStatus,
-    TimelapseRecordingParameters,
-    CameraShootingParameters,
-)
-from ..domain.services import CameraControlService, TimelapseScriptGenerator
-
-
-@dataclass
-class StartTimelapseRecordingRequest:
-    """Request for starting timelapse recording."""
-
-    shots: int
-    interval_seconds: float
-    output_directory: str
-    period_type: str
-    start_time: datetime
-    end_time: datetime
-
-
-@dataclass
-class StartTimelapseRecordingResponse:
-    """Response for starting timelapse recording."""
-
-    success: bool
-    message: str
-    recording_id: Optional[str] = None
-
-
-@dataclass
-class ShootCameraRequest:
-    """Request for shooting camera."""
-
-    subject_distance: float
-    speed: float
-    iso_value: int
-    shots: int
-    interval: float
+from ..domain.entities import CameraCommand
+from ..domain.services import CameraControlService
 
 
 @dataclass
@@ -53,70 +16,21 @@ class ShootCameraResponse:
 
 
 @dataclass
-class GetCameraStatusResponse:
-    """Response for getting camera status."""
+class ExecuteCommandRequest:
+    """Request for executing a camera command."""
 
-    camera_status: CameraStatus
+    command_type: str
+    parameters: dict
 
 
-class StartTimelapseRecordingUseCase:
-    """Use case for starting timelapse recording."""
+@dataclass
+class ExecuteCommandResponse:
+    """Response for executing a camera command."""
 
-    def __init__(
-        self,
-        camera_control_service: CameraControlService,
-        script_generator: TimelapseScriptGenerator,
-    ):
-        self.camera_control_service = camera_control_service
-        self.script_generator = script_generator
-
-    async def execute(
-        self, request: StartTimelapseRecordingRequest
-    ) -> StartTimelapseRecordingResponse:
-        """Execute the use case."""
-        try:
-            # Check if camera is connected
-            if not await self.camera_control_service.is_camera_connected():
-                return StartTimelapseRecordingResponse(
-                    success=False,
-                    message="Camera is not connected",
-                )
-
-            # Create recording parameters
-            parameters = TimelapseRecordingParameters(
-                shots=request.shots,
-                interval_seconds=request.interval_seconds,
-                output_directory=request.output_directory,
-                period_type=request.period_type,
-                start_time=request.start_time,
-                end_time=request.end_time,
-            )
-
-            # Start recording
-            success = await self.camera_control_service.start_timelapse_recording(
-                parameters
-            )
-
-            if success:
-                return StartTimelapseRecordingResponse(
-                    success=True,
-                    message=f"Timelapse recording started for {request.period_type}",
-                    recording_id=(
-                        f"{request.period_type}_"
-                        f"{request.start_time.strftime('%Y%m%d_%H%M%S')}"
-                    ),
-                )
-            else:
-                return StartTimelapseRecordingResponse(
-                    success=False,
-                    message="Failed to start timelapse recording",
-                )
-
-        except Exception as e:
-            return StartTimelapseRecordingResponse(
-                success=False,
-                message=f"Error starting timelapse recording: {str(e)}",
-            )
+    success: bool
+    message: str
+    shooting_id: Optional[str] = None
+    image_path: Optional[str] = None
 
 
 class ShootCameraUseCase:
@@ -125,27 +39,11 @@ class ShootCameraUseCase:
     def __init__(self, camera_control_service: CameraControlService):
         self.camera_control_service = camera_control_service
 
-    async def execute(self, request: ShootCameraRequest) -> ShootCameraResponse:
+    async def execute(self) -> ShootCameraResponse:
         """Execute the use case."""
         try:
-            # Check if camera is connected
-            # if not await self.camera_control_service.is_camera_connected():
-            #    return ShootCameraResponse(
-            #        success=False,
-            #        message="Camera is not connected",
-            #    )
-
-            # Create shooting parameters
-            parameters = CameraShootingParameters(
-                subject_distance=request.subject_distance,
-                speed=request.speed,
-                iso_value=request.iso_value,
-                shots=request.shots,
-                interval=request.interval,
-            )
-
             # Shoot camera
-            result = await self.camera_control_service.shoot_camera(parameters)
+            result = await self.camera_control_service.shoot_camera()
 
             return ShootCameraResponse(
                 success=result.success,
@@ -161,23 +59,33 @@ class ShootCameraUseCase:
             )
 
 
-class GetCameraStatusUseCase:
-    """Use case for getting camera status."""
+class ExecuteCommandUseCase:
+    """Use case for executing camera commands."""
 
     def __init__(self, camera_control_service: CameraControlService):
         self.camera_control_service = camera_control_service
 
-    async def execute(self) -> GetCameraStatusResponse:
+    async def execute(self, request: ExecuteCommandRequest) -> ExecuteCommandResponse:
         """Execute the use case."""
         try:
-            camera_status = await self.camera_control_service.get_camera_status()
-            return GetCameraStatusResponse(camera_status=camera_status)
-        except Exception:
-            # Return a default status with error indication
-            return GetCameraStatusResponse(
-                camera_status=CameraStatus(
-                    is_connected=False,
-                    is_recording=False,
-                    current_mode="error",
-                )
+            # Create camera command
+            command = CameraCommand(
+                command_type=request.command_type,
+                parameters=request.parameters,
+            )
+
+            # Execute command
+            result = await self.camera_control_service.execute_command(command)
+
+            return ExecuteCommandResponse(
+                success=result.success,
+                message=result.message,
+                shooting_id=result.shooting_id,
+                image_path=result.image_path,
+            )
+
+        except Exception as e:
+            return ExecuteCommandResponse(
+                success=False,
+                message=f"Error executing command: {str(e)}",
             )
