@@ -176,9 +176,23 @@ def create_camera_router() -> APIRouter:
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.get("/live-view/stream")
-    async def start_live_view_stream():
-        """Start a live view stream."""
+    async def start_live_view_stream(framerate: float = 5.0, quality: int = 80):
+        """Start a live view stream.
+
+        Args:
+            framerate: Target frames per second (0.1-30.0, default: 5.0)
+            quality: JPEG quality (1-100, default: 80)
+        """
         try:
+            # Validate parameters
+            if framerate < 0.1 or framerate > 30.0:
+                raise HTTPException(
+                    status_code=400, detail="Framerate must be 0.1-30.0 FPS"
+                )
+            if quality < 1 or quality > 100:
+                raise HTTPException(
+                    status_code=400, detail="Quality must be between 1 and 100"
+                )
             import logging
 
             logger = logging.getLogger(__name__)
@@ -186,8 +200,11 @@ def create_camera_router() -> APIRouter:
 
             async def generate_stream():
                 try:
+                    request = StartLiveViewStreamRequest(
+                        framerate=framerate, quality=quality
+                    )
                     async for result in start_live_view_stream_use_case.execute(
-                        StartLiveViewStreamRequest()
+                        request
                     ):
                         if result.success and result.image_data:
                             yield (

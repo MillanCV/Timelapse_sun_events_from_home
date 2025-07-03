@@ -49,5 +49,5 @@ class LiveViewResult:
 class LiveViewStream:
     """Domain entity for live view stream configuration."""
 
-    # Simplified configuration - no parameters needed
-    pass
+    framerate: float = 5.0  # FPS
+    quality: int = 80  # JPEG quality (1-100), default 80

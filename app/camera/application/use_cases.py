@@ -54,8 +54,8 @@ class TakeLiveViewSnapshotResponse:
 class StartLiveViewStreamRequest:
     """Request for starting a live view stream."""
 
-    # Simplified request - no parameters needed
-    pass
+    framerate: float = 5.0  # FPS
+    quality: int = 80  # JPEG quality (1-100), default 80
 
 
 class ShootCameraUseCase:
@@ -159,8 +159,10 @@ class StartLiveViewStreamUseCase:
     ) -> AsyncGenerator[LiveViewResult, None]:
         """Execute the use case."""
         try:
-            # Create simple live view stream configuration
-            config = LiveViewStream()
+            # Create live view stream configuration with parameters
+            config = LiveViewStream(
+                framerate=request.framerate, quality=request.quality
+            )
 
             # Start live view stream
             async for result in self.camera_control_service.start_live_view_stream(

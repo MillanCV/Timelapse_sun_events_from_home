@@ -343,9 +343,13 @@ class CHDKPTPCameraService(CameraControlService):
                     self.logger.info(f"🎥 Image dtype: {image.dtype}")
                     self.logger.info(f"🎥 Image size: {image.size}")
 
-                    # Convert to JPEG
-                    self.logger.info("🎥 Converting to JPEG...")
-                    ret, jpeg = cv2.imencode(".jpg", image)
+                    # Convert to JPEG with configured quality
+                    self.logger.info(
+                        f"🎥 Converting to JPEG with quality {config.quality}..."
+                    )
+                    ret, jpeg = cv2.imencode(
+                        ".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, config.quality]
+                    )
                     if not ret:
                         self.logger.warning("🎥 Could not encode JPEG")
                         continue
@@ -363,9 +367,11 @@ class CHDKPTPCameraService(CameraControlService):
                         timestamp=datetime.now(),
                     )
 
-                    # Wait for next frame (fixed 5 FPS)
-                    frame_interval = 0.2  # 1/5 = 0.2 seconds
-                    self.logger.info(f"🎥 Waiting {frame_interval}s for next frame...")
+                    # Wait for next frame based on configured framerate
+                    frame_interval = 1.0 / config.framerate
+                    self.logger.info(
+                        f"🎥 Waiting {frame_interval:.3f}s for next frame (target: {config.framerate} FPS)..."
+                    )
                     await asyncio.sleep(frame_interval)
 
                 except subprocess.CalledProcessError as e:
