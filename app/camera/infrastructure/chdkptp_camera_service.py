@@ -143,97 +143,38 @@ class CHDKPTPCameraService(CameraControlService):
             self.logger.info(f"📸 CHDKPTP location: {self.chdkptp_location}")
             self.logger.info(f"📸 Frame path: {self._frame_path}")
 
-            # Build CHDKPTP command using the same pattern as shoot_camera
-            chdkptp_script = self.chdkptp_location / "chdkptp.sh"
-            self.logger.info(f"📸 Looking for script at: {chdkptp_script}")
+            # Validate CHDKPTP setup
+            (
+                is_valid,
+                error_msg,
+                chdkptp_script,
+                chdkptp_dir,
+            ) = await self._validate_chdkptp_setup()
+            if not is_valid:
+                return await self._create_live_view_result(False, error_msg)
 
-            if not chdkptp_script.exists():
-                self.logger.error(f"📸 CHDKPTP script not found: {chdkptp_script}")
-                return LiveViewResult(
-                    success=False,
-                    message="CHDKPTP script not found",
-                    image_data=None,
-                    image_format=None,
-                    timestamp=datetime.now(),
-                )
-
-            self.logger.info("📸 CHDKPTP script found, building command...")
-
-            # Build command with proper structure (ignore overlay parameter)
-            cmd = [
-                "sudo",
-                str(chdkptp_script),
-                "-c",  # connect
-                "-erec",  # switch to record mode
-                "-elvdumpimg -vp=frame.ppm -count=1",  # live view dump
-            ]
-
-            self.logger.info(f"📸 Built command: {cmd}")
-            self.logger.info("📸 Executing live view command...")
-
-            # Execute the command
-            result = await self._run_chdkptp_command(cmd)
-
-            self.logger.info(
-                f"📸 Command completed with return code: {result.returncode}"
+            # Execute live view command
+            success, result, error_msg = await self._execute_live_view_command(
+                chdkptp_script, chdkptp_dir
             )
-            if result.stdout:
-                self.logger.info(f"📸 Command stdout: {result.stdout}")
-            if result.stderr:
-                self.logger.info(f"📸 Command stderr: {result.stderr}")
+            if not success:
+                return await self._create_live_view_result(False, error_msg)
 
-            if result.returncode == 0:
-                self.logger.info("📸 Command successful, reading PPM image...")
+            # Capture and process frame
+            success, jpeg_data, error_msg = await self._capture_and_process_frame(
+                quality=80, add_timestamp=include_overlay
+            )
+            if not success:
+                return await self._create_live_view_result(False, error_msg)
 
-                # Read the PPM image
-                image_data = await self._read_ppm_image()
-                print(f"📸 image_data: {image_data}")
-                if image_data is not None:
-                    self.logger.info(
-                        f"📸 PPM image loaded successfully, shape: {image_data.shape}"
-                    )
-
-                    # Convert to JPEG
-                    self.logger.info("📸 Converting to JPEG...")
-                    jpeg_data = await self._convert_to_jpeg(image_data)
-                    self.logger.info(
-                        f"📸 JPEG conversion successful, size: {len(jpeg_data)} bytes"
-                    )
-
-                    return LiveViewResult(
-                        success=True,
-                        message="Live view snapshot captured successfully",
-                        image_data=jpeg_data,
-                        image_format="jpeg",
-                        timestamp=datetime.now(),
-                    )
-                else:
-                    self.logger.error("📸 Failed to read PPM image data")
-                    return LiveViewResult(
-                        success=False,
-                        message="Failed to read PPM image data",
-                        image_data=None,
-                        image_format=None,
-                        timestamp=datetime.now(),
-                    )
-            else:
-                self.logger.error(f"📸 Live view command failed: {result.stderr}")
-                return LiveViewResult(
-                    success=False,
-                    message=f"Live view snapshot failed: {result.stderr}",
-                    image_data=None,
-                    image_format=None,
-                    timestamp=datetime.now(),
-                )
+            return await self._create_live_view_result(
+                True, "Live view snapshot captured successfully", jpeg_data
+            )
 
         except Exception as e:
             self.logger.error(f"📸 Error taking live view snapshot: {e}")
-            return LiveViewResult(
-                success=False,
-                message=f"Error taking live view snapshot: {str(e)}",
-                image_data=None,
-                image_format=None,
-                timestamp=datetime.now(),
+            return await self._create_live_view_result(
+                False, f"Error taking live view snapshot: {str(e)}"
             )
 
     async def start_live_view_stream(
@@ -246,36 +187,15 @@ class CHDKPTPCameraService(CameraControlService):
             self.logger.info(f"🎥 Config: {config}")
             self._streaming = True
 
-            # Get CHDKPTP paths
-            chdkptp_script = str(self.chdkptp_location / "chdkptp.sh")
-            chdkptp_dir = str(self.chdkptp_location)
-            frame_path = str(self._frame_path)
-
-            self.logger.info(f"🎥 CHDKPTP script path: {chdkptp_script}")
-            self.logger.info(f"🎥 CHDKPTP directory: {chdkptp_dir}")
-            self.logger.info(f"🎥 Frame path: {frame_path}")
-
-            # Check if paths exist
-            if not Path(chdkptp_script).exists():
-                self.logger.error(f"🎥 CHDKPTP script not found: {chdkptp_script}")
-                yield LiveViewResult(
-                    success=False,
-                    message=f"CHDKPTP script not found: {chdkptp_script}",
-                    image_data=None,
-                    image_format=None,
-                    timestamp=datetime.now(),
-                )
-                return
-
-            if not Path(chdkptp_dir).exists():
-                self.logger.error(f"🎥 CHDKPTP directory not found: {chdkptp_dir}")
-                yield LiveViewResult(
-                    success=False,
-                    message=f"CHDKPTP directory not found: {chdkptp_dir}",
-                    image_data=None,
-                    image_format=None,
-                    timestamp=datetime.now(),
-                )
+            # Validate CHDKPTP setup
+            (
+                is_valid,
+                error_msg,
+                chdkptp_script,
+                chdkptp_dir,
+            ) = await self._validate_chdkptp_setup()
+            if not is_valid:
+                yield await self._create_live_view_result(False, error_msg)
                 return
 
             self.logger.info("🎥 Starting frame capture loop...")
@@ -286,121 +206,42 @@ class CHDKPTPCameraService(CameraControlService):
                     frame_count += 1
                     self.logger.info(f"🎥 Taking frame {frame_count}...")
 
-                    # Build command
-                    cmd = [
-                        "sudo",
-                        chdkptp_script,
-                        "-c",
-                        "-erec",
-                        "-elvdumpimg -vp=frame.ppm -count=1",
-                    ]
-                    self.logger.info(f"🎥 Executing command: {' '.join(cmd)}")
-                    self.logger.info(f"🎥 Working directory: {chdkptp_dir}")
-
-                    # Use the proven working pattern
+                    # Execute live view command using the same async pattern as snapshot
                     start_time = datetime.now()
-                    result = subprocess.run(
-                        cmd,
-                        cwd=chdkptp_dir,
-                        check=True,
-                        capture_output=True,
-                        text=True,
+                    success, result, error_msg = await self._execute_live_view_command(
+                        chdkptp_script, chdkptp_dir
                     )
                     end_time = datetime.now()
                     duration = (end_time - start_time).total_seconds()
 
                     self.logger.info(f"🎥 Command completed in {duration:.3f}s")
-                    if result.stdout:
-                        self.logger.info(f"🎥 Command stdout: {result.stdout}")
-                    if result.stderr:
-                        self.logger.info(f"🎥 Command stderr: {result.stderr}")
 
-                    # Check if frame file was created
-                    frame_path_obj = Path(frame_path)
-                    if not frame_path_obj.exists():
-                        self.logger.warning(f"🎥 Frame file not found: {frame_path}")
-                        continue
-
-                    frame_size = frame_path_obj.stat().st_size
-                    self.logger.info(f"🎥 Frame file size: {frame_size} bytes")
-
-                    # Read image
-                    self.logger.info(f"🎥 Reading image from: {frame_path}")
-                    image = cv2.imread(frame_path)
-
-                    if image is None:
-                        self.logger.warning("🎥 Could not read frame.ppm")
-                        self.logger.info(
-                            f"🎥 Frame path exists: {frame_path_obj.exists()}"
+                    if not success:
+                        self.logger.warning(
+                            f"🎥 Frame {frame_count} command failed: {error_msg}"
                         )
-                        if frame_path_obj.exists():
-                            self.logger.info(f"🎥 Frame path size: {frame_size} bytes")
+                        continue
+
+                    # Capture and process frame with timestamp overlay
+                    (
+                        success,
+                        jpeg_data,
+                        error_msg,
+                    ) = await self._capture_and_process_frame(
+                        quality=config.quality, add_timestamp=True
+                    )
+                    if not success:
+                        self.logger.warning(
+                            f"🎥 Frame {frame_count} failed: {error_msg}"
+                        )
                         continue
 
                     self.logger.info(
-                        f"🎥 Image loaded successfully, shape: {image.shape}"
-                    )
-                    self.logger.info(f"🎥 Image dtype: {image.dtype}")
-                    self.logger.info(f"🎥 Image size: {image.size}")
-
-                    # Overlay datetime with milliseconds
-                    now = datetime.now()
-                    timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S.%f")[
-                        :-3
-                    ]  # trim to ms
-                    font = cv2.FONT_HERSHEY_SIMPLEX
-                    font_scale = 0.7
-                    font_thickness = 2
-                    text_size, _ = cv2.getTextSize(
-                        timestamp_str, font, font_scale, font_thickness
-                    )
-                    text_x = 10
-                    text_y = image.shape[0] - 10
-                    # Draw black outline
-                    cv2.putText(
-                        image,
-                        timestamp_str,
-                        (text_x, text_y),
-                        font,
-                        font_scale,
-                        (0, 0, 0),
-                        font_thickness + 2,
-                        cv2.LINE_AA,
-                    )
-                    # Draw white text
-                    cv2.putText(
-                        image,
-                        timestamp_str,
-                        (text_x, text_y),
-                        font,
-                        font_scale,
-                        (255, 255, 255),
-                        font_thickness,
-                        cv2.LINE_AA,
+                        f"🎥 Frame {frame_count} captured successfully, size: {len(jpeg_data)} bytes"
                     )
 
-                    # Convert to JPEG with configured quality
-                    self.logger.info(
-                        f"🎥 Converting to JPEG with quality {config.quality}..."
-                    )
-                    ret, jpeg = cv2.imencode(
-                        ".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, config.quality]
-                    )
-                    if not ret:
-                        self.logger.warning("🎥 Could not encode JPEG")
-                        continue
-
-                    jpeg_bytes = jpeg.tobytes()
-                    self.logger.info(
-                        f"🎥 Frame {frame_count} captured successfully, size: {len(jpeg_bytes)} bytes"
-                    )
-
-                    yield LiveViewResult(
-                        success=True,
-                        message=f"Frame {frame_count} captured",
-                        image_data=jpeg_bytes,
-                        image_format="jpeg",
-                        timestamp=datetime.now(),
+                    yield await self._create_live_view_result(
+                        True, f"Frame {frame_count} captured", jpeg_data
                     )
 
                     # Wait for next frame based on configured framerate
@@ -417,12 +258,8 @@ class CHDKPTPCameraService(CameraControlService):
                         self.logger.error(f"🎥 Error stdout: {e.stdout}")
                     if e.stderr:
                         self.logger.error(f"🎥 Error stderr: {e.stderr}")
-                    yield LiveViewResult(
-                        success=False,
-                        message=f"Snapshot failed: {str(e)}",
-                        image_data=None,
-                        image_format=None,
-                        timestamp=datetime.now(),
+                    yield await self._create_live_view_result(
+                        False, f"Snapshot failed: {str(e)}"
                     )
                     break
                 except Exception as e:
@@ -433,12 +270,8 @@ class CHDKPTPCameraService(CameraControlService):
                     import traceback
 
                     self.logger.error(f"🎥 Traceback: {traceback.format_exc()}")
-                    yield LiveViewResult(
-                        success=False,
-                        message=f"Stream error: {str(e)}",
-                        image_data=None,
-                        image_format=None,
-                        timestamp=datetime.now(),
+                    yield await self._create_live_view_result(
+                        False, f"Stream error: {str(e)}"
                     )
                     break
 
@@ -448,12 +281,8 @@ class CHDKPTPCameraService(CameraControlService):
             import traceback
 
             self.logger.error(f"🎥 Traceback: {traceback.format_exc()}")
-            yield LiveViewResult(
-                success=False,
-                message=f"Error starting live view stream: {str(e)}",
-                image_data=None,
-                image_format=None,
-                timestamp=datetime.now(),
+            yield await self._create_live_view_result(
+                False, f"Error starting live view stream: {str(e)}"
             )
         finally:
             self._streaming = False
@@ -754,3 +583,156 @@ class CHDKPTPCameraService(CameraControlService):
             # Restore original directory
             os.chdir(original_cwd)
             self.logger.info(f"🔧 Restored directory to: {os.getcwd()}")
+
+    async def _validate_chdkptp_setup(
+        self,
+    ) -> tuple[bool, str, Optional[Path], Optional[str]]:
+        """Validate CHDKPTP setup and return paths if valid."""
+        chdkptp_script = self.chdkptp_location / "chdkptp.sh"
+        chdkptp_dir = str(self.chdkptp_location)
+
+        if not chdkptp_script.exists():
+            error_msg = f"CHDKPTP script not found: {chdkptp_script}"
+            self.logger.error(f"📸 {error_msg}")
+            return False, error_msg, None, None
+
+        if not Path(chdkptp_dir).exists():
+            error_msg = f"CHDKPTP directory not found: {chdkptp_dir}"
+            self.logger.error(f"📸 {error_msg}")
+            return False, error_msg, None, None
+
+        return True, "", chdkptp_script, chdkptp_dir
+
+    async def _execute_live_view_command(
+        self, chdkptp_script: Path, chdkptp_dir: str
+    ) -> tuple[bool, Optional[subprocess.CompletedProcess], str]:
+        """Execute the live view command and return success status, result, and error message."""
+        cmd = [
+            "sudo",
+            str(chdkptp_script),
+            "-c",  # connect
+            "-erec",  # switch to record mode
+            "-elvdumpimg -vp=frame.ppm -count=1",  # live view dump
+        ]
+
+        self.logger.info(f"📸 Executing command: {' '.join(cmd)}")
+
+        try:
+            result = await self._run_chdkptp_command(cmd)
+            self.logger.info(
+                f"📸 Command completed with return code: {result.returncode}"
+            )
+
+            if result.stdout:
+                self.logger.info(f"📸 Command stdout: {result.stdout}")
+            if result.stderr:
+                self.logger.info(f"📸 Command stderr: {result.stderr}")
+
+            if result.returncode == 0:
+                return True, result, ""
+            else:
+                error_msg = f"Live view command failed: {result.stderr}"
+                self.logger.error(f"📸 {error_msg}")
+                return False, result, error_msg
+
+        except Exception as e:
+            error_msg = f"Error executing live view command: {str(e)}"
+            self.logger.error(f"📸 {error_msg}")
+            return False, None, error_msg
+
+    async def _capture_and_process_frame(
+        self, quality: int = 80, add_timestamp: bool = False
+    ) -> tuple[bool, Optional[bytes], str]:
+        """Capture a frame and process it to JPEG bytes."""
+        try:
+            # Check if frame file was created
+            frame_path_obj = Path(self._frame_path)
+            if not frame_path_obj.exists():
+                error_msg = f"Frame file not found: {self._frame_path}"
+                self.logger.warning(f"📸 {error_msg}")
+                return False, None, error_msg
+
+            frame_size = frame_path_obj.stat().st_size
+            self.logger.info(f"📸 Frame file size: {frame_size} bytes")
+
+            # Read image
+            self.logger.info(f"📸 Reading image from: {self._frame_path}")
+            image = cv2.imread(str(self._frame_path))
+
+            if image is None:
+                error_msg = "Could not read frame.ppm"
+                self.logger.warning(f"📸 {error_msg}")
+                return False, None, error_msg
+
+            self.logger.info(f"📸 Image loaded successfully, shape: {image.shape}")
+
+            # Add timestamp overlay if requested
+            if add_timestamp:
+                image = self._add_timestamp_overlay(image)
+
+            # Convert to JPEG
+            self.logger.info(f"📸 Converting to JPEG with quality {quality}...")
+            ret, jpeg = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, quality])
+            if not ret:
+                error_msg = "Could not encode JPEG"
+                self.logger.warning(f"📸 {error_msg}")
+                return False, None, error_msg
+
+            jpeg_bytes = jpeg.tobytes()
+            self.logger.info(
+                f"📸 JPEG conversion successful, size: {len(jpeg_bytes)} bytes"
+            )
+
+            return True, jpeg_bytes, ""
+
+        except Exception as e:
+            error_msg = f"Error capturing and processing frame: {str(e)}"
+            self.logger.error(f"📸 {error_msg}")
+            return False, None, error_msg
+
+    def _add_timestamp_overlay(self, image: np.ndarray) -> np.ndarray:
+        """Add timestamp overlay to the image."""
+        now = datetime.now()
+        timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # trim to ms
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.7
+        font_thickness = 2
+        text_x = 10
+        text_y = image.shape[0] - 10
+
+        # Draw black outline
+        cv2.putText(
+            image,
+            timestamp_str,
+            (text_x, text_y),
+            font,
+            font_scale,
+            (0, 0, 0),
+            font_thickness + 2,
+            cv2.LINE_AA,
+        )
+        # Draw white text
+        cv2.putText(
+            image,
+            timestamp_str,
+            (text_x, text_y),
+            font,
+            font_scale,
+            (255, 255, 255),
+            font_thickness,
+            cv2.LINE_AA,
+        )
+
+        return image
+
+    async def _create_live_view_result(
+        self, success: bool, message: str, image_data: Optional[bytes] = None
+    ) -> LiveViewResult:
+        """Create a LiveViewResult with consistent timestamp."""
+        return LiveViewResult(
+            success=success,
+            message=message,
+            image_data=image_data,
+            image_format="jpeg" if image_data else None,
+            timestamp=datetime.now(),
+        )
