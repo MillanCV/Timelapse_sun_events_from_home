@@ -195,14 +195,14 @@ def create_camera_router() -> APIRouter:
                             chdkptp_dir = str(camera_service.chdkptp_location)
                             frame_path = str(camera_service._frame_path)
 
+                            # Use shell=True to handle command parsing
+                            cmd = (
+                                f"sudo {chdkptp_script} -c -e "
+                                f"'lvdumpimg -vp=frame.ppm -count=1'"
+                            )
                             subprocess.run(
-                                [
-                                    "sudo",
-                                    chdkptp_script,
-                                    "-c",
-                                    "-e",
-                                    "lvdumpimg -vp=frame.ppm -count=1",
-                                ],
+                                cmd,
+                                shell=True,
                                 cwd=chdkptp_dir,
                                 check=True,
                             )

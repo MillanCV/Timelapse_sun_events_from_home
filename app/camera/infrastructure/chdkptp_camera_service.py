@@ -243,12 +243,40 @@ class CHDKPTPCameraService(CameraControlService):
         try:
             self.logger.info("🎥 Starting live view stream...")
             self.logger.info(f"🎥 CHDKPTP location: {self.chdkptp_location}")
+            self.logger.info(f"🎥 Config: {config}")
             self._streaming = True
 
             # Get CHDKPTP paths
             chdkptp_script = str(self.chdkptp_location / "chdkptp.sh")
             chdkptp_dir = str(self.chdkptp_location)
             frame_path = str(self._frame_path)
+
+            self.logger.info(f"🎥 CHDKPTP script path: {chdkptp_script}")
+            self.logger.info(f"🎥 CHDKPTP directory: {chdkptp_dir}")
+            self.logger.info(f"🎥 Frame path: {frame_path}")
+
+            # Check if paths exist
+            if not Path(chdkptp_script).exists():
+                self.logger.error(f"🎥 CHDKPTP script not found: {chdkptp_script}")
+                yield LiveViewResult(
+                    success=False,
+                    message=f"CHDKPTP script not found: {chdkptp_script}",
+                    image_data=None,
+                    image_format=None,
+                    timestamp=datetime.now(),
+                )
+                return
+
+            if not Path(chdkptp_dir).exists():
+                self.logger.error(f"🎥 CHDKPTP directory not found: {chdkptp_dir}")
+                yield LiveViewResult(
+                    success=False,
+                    message=f"CHDKPTP directory not found: {chdkptp_dir}",
+                    image_data=None,
+                    image_format=None,
+                    timestamp=datetime.now(),
+                )
+                return
 
             self.logger.info("🎥 Starting frame capture loop...")
             frame_count = 0
@@ -258,24 +286,65 @@ class CHDKPTPCameraService(CameraControlService):
                     frame_count += 1
                     self.logger.info(f"🎥 Taking frame {frame_count}...")
 
+                    # Build command
+                    cmd = [
+                        "sudo",
+                        chdkptp_script,
+                        "-c",
+                        "-erec",
+                        "-elvdumpimg -vp=frame.ppm -count=1",
+                    ]
+                    self.logger.info(f"🎥 Executing command: {' '.join(cmd)}")
+                    self.logger.info(f"🎥 Working directory: {chdkptp_dir}")
+
                     # Use the proven working pattern
-                    subprocess.run(
-                        [
-                            "sudo",
-                            chdkptp_script,
-                            "-c",
-                            "-e",
-                            "lvdumpimg -vp=frame.ppm -count=1",
-                        ],
+                    start_time = datetime.now()
+                    result = subprocess.run(
+                        cmd,
                         cwd=chdkptp_dir,
                         check=True,
+                        capture_output=True,
+                        text=True,
                     )
+                    end_time = datetime.now()
+                    duration = (end_time - start_time).total_seconds()
 
-                    image = cv2.imread(frame_path)
-                    if image is None:
-                        self.logger.warning("🎥 Could not read frame.ppm")
+                    self.logger.info(f"🎥 Command completed in {duration:.3f}s")
+                    if result.stdout:
+                        self.logger.info(f"🎥 Command stdout: {result.stdout}")
+                    if result.stderr:
+                        self.logger.info(f"🎥 Command stderr: {result.stderr}")
+
+                    # Check if frame file was created
+                    frame_path_obj = Path(frame_path)
+                    if not frame_path_obj.exists():
+                        self.logger.warning(f"🎥 Frame file not found: {frame_path}")
                         continue
 
+                    frame_size = frame_path_obj.stat().st_size
+                    self.logger.info(f"🎥 Frame file size: {frame_size} bytes")
+
+                    # Read image
+                    self.logger.info(f"🎥 Reading image from: {frame_path}")
+                    image = cv2.imread(frame_path)
+
+                    if image is None:
+                        self.logger.warning("🎥 Could not read frame.ppm")
+                        self.logger.info(
+                            f"🎥 Frame path exists: {frame_path_obj.exists()}"
+                        )
+                        if frame_path_obj.exists():
+                            self.logger.info(f"🎥 Frame path size: {frame_size} bytes")
+                        continue
+
+                    self.logger.info(
+                        f"🎥 Image loaded successfully, shape: {image.shape}"
+                    )
+                    self.logger.info(f"🎥 Image dtype: {image.dtype}")
+                    self.logger.info(f"🎥 Image size: {image.size}")
+
+                    # Convert to JPEG
+                    self.logger.info("🎥 Converting to JPEG...")
                     ret, jpeg = cv2.imencode(".jpg", image)
                     if not ret:
                         self.logger.warning("🎥 Could not encode JPEG")
@@ -301,6 +370,11 @@ class CHDKPTPCameraService(CameraControlService):
 
                 except subprocess.CalledProcessError as e:
                     self.logger.error(f"🎥 Snapshot loop failed: {e}")
+                    self.logger.error(f"🎥 Return code: {e.returncode}")
+                    if e.stdout:
+                        self.logger.error(f"🎥 Error stdout: {e.stdout}")
+                    if e.stderr:
+                        self.logger.error(f"🎥 Error stderr: {e.stderr}")
                     yield LiveViewResult(
                         success=False,
                         message=f"Snapshot failed: {str(e)}",
@@ -313,6 +387,10 @@ class CHDKPTPCameraService(CameraControlService):
                     self.logger.error(
                         f"🎥 Error in live view stream frame {frame_count}: {e}"
                     )
+                    self.logger.error(f"🎥 Exception type: {type(e).__name__}")
+                    import traceback
+
+                    self.logger.error(f"🎥 Traceback: {traceback.format_exc()}")
                     yield LiveViewResult(
                         success=False,
                         message=f"Stream error: {str(e)}",
@@ -324,6 +402,10 @@ class CHDKPTPCameraService(CameraControlService):
 
         except Exception as e:
             self.logger.error(f"🎥 Error starting live view stream: {e}")
+            self.logger.error(f"🎥 Exception type: {type(e).__name__}")
+            import traceback
+
+            self.logger.error(f"🎥 Traceback: {traceback.format_exc()}")
             yield LiveViewResult(
                 success=False,
                 message=f"Error starting live view stream: {str(e)}",
@@ -334,11 +416,14 @@ class CHDKPTPCameraService(CameraControlService):
         finally:
             self._streaming = False
             self.logger.info("🎥 Live view stream stopped")
+            self.logger.info(f"🎥 Total frames processed: {frame_count}")
 
     async def stop_live_view_stream(self) -> None:
         """Stop the live view stream."""
-        self.logger.info("Stopping live view stream...")
+        self.logger.info("🎥 Stopping live view stream...")
+        self.logger.info(f"🎥 Current streaming state: {self._streaming}")
         self._streaming = False
+        self.logger.info("🎥 Live view stream stop requested")
 
     async def _read_ppm_image(self) -> Optional[np.ndarray]:
         """Read a PPM image from the frame file."""
