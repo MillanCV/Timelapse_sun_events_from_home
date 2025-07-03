@@ -5,17 +5,11 @@ from fastapi.responses import StreamingResponse, Response
 import logging
 
 from ...camera.application.use_cases import (
-    CameraShootingUseCase,
-    CameraStatusUseCase,
-    LiveViewSnapshotUseCase,
-    LiveViewStreamUseCase,
-)
-from ...camera.domain.entities import (
-    CameraShootingRequest,
-    CameraStatusRequest,
-    LiveViewSnapshotRequest,
-    LiveViewStreamRequest,
-    LiveViewStream,
+    ShootCameraUseCase,
+    TakeLiveViewSnapshotUseCase,
+    StartLiveViewStreamUseCase,
+    TakeLiveViewSnapshotRequest,
+    StartLiveViewStreamRequest,
 )
 from ...camera.infrastructure.container import get_camera_container
 from ...camera.infrastructure.error_handling_service import get_error_handling_service
@@ -89,28 +83,23 @@ def create_camera_router() -> APIRouter:
         try:
             logger.info("📸 Starting camera shooting")
 
-            use_case = CameraShootingUseCase(container.camera_service)
-            request_data = CameraShootingRequest()
+            use_case = ShootCameraUseCase(container.camera_service)
+            result = await use_case.execute()
 
-            result = await use_case.execute(request_data)
-
-            if result.is_success:
-                logger.info(f"✅ Camera shooting successful: {result.value.message}")
+            if result.success:
+                logger.info(f"✅ Camera shooting successful: {result.message}")
                 return error_service.create_success_response(
                     {
-                        "message": result.value.message,
-                        "shooting_id": result.value.shooting_id,
-                        "image_path": result.value.image_path,
-                        "timestamp": result.value.timestamp.isoformat()
-                        if result.value.timestamp
-                        else None,
+                        "message": result.message,
+                        "shooting_id": result.shooting_id,
+                        "image_path": result.image_path,
                     },
                     request_id,
                 )
             else:
-                logger.error(f"❌ Camera shooting failed: {result.error}")
+                logger.error(f"❌ Camera shooting failed: {result.message}")
                 error_response = error_service.handle_error(
-                    Exception(result.error),
+                    Exception(result.message),
                     {"operation": "camera_shooting"},
                     request_id,
                 )
@@ -122,54 +111,6 @@ def create_camera_router() -> APIRouter:
             logger.error(f"❌ Unexpected error in camera shooting: {e}")
             error_response = error_service.handle_error(
                 e, {"operation": "camera_shooting"}, request_id
-            )
-            raise HTTPException(status_code=500, detail=error_response.dict())
-
-    @router.get("/status")
-    async def get_camera_status(
-        request: Request,
-        container=Depends(get_camera_container_dependency),
-        error_service=Depends(get_error_handling_service_dependency),
-    ):
-        """Get the current status of the camera."""
-        request_id = str(request.headers.get("X-Request-ID", ""))
-
-        try:
-            logger.info("📊 Getting camera status")
-
-            use_case = CameraStatusUseCase(container.camera_service)
-            request_data = CameraStatusRequest()
-
-            result = await use_case.execute(request_data)
-
-            if result.is_success:
-                status = result.value
-                logger.info(
-                    f"✅ Camera status retrieved: connected={status.is_connected}"
-                )
-                return error_service.create_success_response(
-                    {
-                        "is_connected": status.is_connected,
-                        "is_recording": status.is_recording,
-                        "current_mode": status.current_mode,
-                        "battery_level": status.battery_level,
-                        "storage_available": status.storage_available,
-                    },
-                    request_id,
-                )
-            else:
-                logger.error(f"❌ Failed to get camera status: {result.error}")
-                error_response = error_service.handle_error(
-                    Exception(result.error), {"operation": "camera_status"}, request_id
-                )
-                raise HTTPException(status_code=500, detail=error_response.dict())
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"❌ Unexpected error getting camera status: {e}")
-            error_response = error_service.handle_error(
-                e, {"operation": "camera_status"}, request_id
             )
             raise HTTPException(status_code=500, detail=error_response.dict())
 
@@ -194,16 +135,13 @@ def create_camera_router() -> APIRouter:
                 else:
                     quality = 80  # Fallback default
 
-            use_case = LiveViewSnapshotUseCase(container.camera_service)
-            request_data = LiveViewSnapshotRequest(quality=quality)
+            use_case = TakeLiveViewSnapshotUseCase(container.camera_service)
+            request_data = TakeLiveViewSnapshotRequest()
 
             result = await use_case.execute(request_data)
 
-            if result.is_success:
-                live_view_result = result.value
-                logger.info(
-                    f"✅ Live view snapshot successful: {live_view_result.message}"
-                )
+            if result.success:
+                logger.info(f"✅ Live view snapshot successful: {result.message}")
 
                 # Add cache-busting headers to prevent browser caching
                 headers = {
@@ -214,15 +152,15 @@ def create_camera_router() -> APIRouter:
                 }
 
                 return Response(
-                    content=live_view_result.image_data,
-                    media_type=f"image/{live_view_result.image_format}",
+                    content=result.image_data,
+                    media_type="image/jpeg",
                     headers=headers,
                 )
             else:
-                logger.error(f"❌ Live view snapshot failed: {result.error}")
+                logger.error(f"❌ Live view snapshot failed: {result.message}")
                 error_response = error_service.handle_error(
-                    Exception(result.error),
-                    {"operation": "live_view_snapshot", "quality": quality},
+                    Exception(result.message),
+                    {"operation": "live_view_snapshot"},
                     request_id,
                 )
                 raise HTTPException(status_code=500, detail=error_response.dict())
@@ -232,7 +170,7 @@ def create_camera_router() -> APIRouter:
         except Exception as e:
             logger.error(f"❌ Unexpected error in live view snapshot: {e}")
             error_response = error_service.handle_error(
-                e, {"operation": "live_view_snapshot", "quality": quality}, request_id
+                e, {"operation": "live_view_snapshot"}, request_id
             )
             raise HTTPException(status_code=500, detail=error_response.dict())
 
@@ -251,7 +189,8 @@ def create_camera_router() -> APIRouter:
 
         try:
             logger.info(
-                f"🎥 Starting live view stream with framerate={framerate}, quality={quality}"
+                f"🎥 Starting live view stream with framerate={framerate}, "
+                f"quality={quality}"
             )
 
             # Get default values from configuration if not provided
@@ -294,9 +233,9 @@ def create_camera_router() -> APIRouter:
                 )
                 raise HTTPException(status_code=400, detail=error_response.dict())
 
-            use_case = LiveViewStreamUseCase(container.camera_service)
-            request_data = LiveViewStreamRequest(
-                stream_config=LiveViewStream(framerate=framerate, quality=quality)
+            use_case = StartLiveViewStreamUseCase(container.camera_service)
+            request_data = StartLiveViewStreamRequest(
+                framerate=framerate, quality=quality
             )
 
             result = await use_case.execute(request_data)
@@ -419,11 +358,19 @@ def create_camera_router() -> APIRouter:
                         "command_timeout": config.camera.command_timeout,
                     },
                     "image_processing": {
-                        "default_jpeg_quality": config.image_processing.default_jpeg_quality,
-                        "timestamp_font_scale": config.image_processing.timestamp_font_scale,
-                        "timestamp_font_thickness": config.image_processing.timestamp_font_thickness,
+                        "default_jpeg_quality": (
+                            config.image_processing.default_jpeg_quality
+                        ),
+                        "timestamp_font_scale": (
+                            config.image_processing.timestamp_font_scale
+                        ),
+                        "timestamp_font_thickness": (
+                            config.image_processing.timestamp_font_thickness
+                        ),
                         "timestamp_color": config.image_processing.timestamp_color,
-                        "timestamp_outline_color": config.image_processing.timestamp_outline_color,
+                        "timestamp_outline_color": (
+                            config.image_processing.timestamp_outline_color
+                        ),
                     },
                     "environment": {
                         "environment": config.environment.environment,
