@@ -12,6 +12,8 @@ from ...camera.application.use_cases import (
     ExecuteCommandRequest,
     TakeLiveViewSnapshotUseCase,
     TakeLiveViewSnapshotRequest,
+    StartLiveViewStreamUseCase,
+    StartLiveViewStreamRequest,
 )
 from ...camera.infrastructure.chdkptp_camera_service import (
     CHDKPTPCameraService,
@@ -70,6 +72,7 @@ def create_camera_router() -> APIRouter:
     shoot_camera_use_case = ShootCameraUseCase(camera_service)
     execute_command_use_case = ExecuteCommandUseCase(camera_service)
     take_live_view_snapshot_use_case = TakeLiveViewSnapshotUseCase(camera_service)
+    start_live_view_stream_use_case = StartLiveViewStreamUseCase(camera_service)
 
     @router.post("/quick-shoot", response_model=ShootCameraResponseModel)
     async def shoot_camera():
@@ -176,63 +179,45 @@ def create_camera_router() -> APIRouter:
     async def start_live_view_stream():
         """Start a live view stream."""
         try:
-            import subprocess
-            import cv2
-            import time
             import logging
 
             logger = logging.getLogger(__name__)
             logger.info("Client connected to live view stream.")
 
-            def generate():
+            async def generate_stream():
                 try:
-                    while True:
-                        try:
-                            # Get CHDKPTP paths from camera service
-                            chdkptp_script = str(
-                                camera_service.chdkptp_location / "chdkptp.sh"
-                            )
-                            chdkptp_dir = str(camera_service.chdkptp_location)
-                            frame_path = str(camera_service._frame_path)
-
-                            # Use shell=True to handle command parsing
-                            cmd = (
-                                f"sudo {chdkptp_script} -c -e "
-                                f"'lvdumpimg -vp=frame.ppm -count=1'"
-                            )
-                            subprocess.run(
-                                cmd,
-                                shell=True,
-                                cwd=chdkptp_dir,
-                                check=True,
-                            )
-
-                            image = cv2.imread(frame_path)
-                            if image is None:
-                                logger.warning("Could not read frame.ppm")
-                                continue
-
-                            ret, jpeg = cv2.imencode(".jpg", image)
-                            if not ret:
-                                continue
-
+                    async for result in start_live_view_stream_use_case.execute(
+                        StartLiveViewStreamRequest()
+                    ):
+                        if result.success and result.image_data:
                             yield (
                                 b"--frame\r\n"
                                 b"Content-Type: image/jpeg\r\n\r\n"
-                                + jpeg.tobytes()
+                                + result.image_data
                                 + b"\r\n"
                             )
-
-                            time.sleep(0.3)  # ~5 fps
-
-                        except subprocess.CalledProcessError as e:
-                            logger.error(f"Snapshot loop failed: {e}")
-                            break
-                except GeneratorExit:
-                    logger.info("Client disconnected from live view stream.")
+                        else:
+                            # Send error frame
+                            error_frame = (
+                                b"--frame\r\n"
+                                b"Content-Type: text/plain\r\n\r\n"
+                                + result.message.encode()
+                                + b"\r\n"
+                            )
+                            yield error_frame
+                except Exception as e:
+                    logger.error(f"Error in live view stream: {e}")
+                    error_frame = (
+                        b"--frame\r\n"
+                        b"Content-Type: text/plain\r\n\r\n"
+                        + f"Stream error: {str(e)}".encode()
+                        + b"\r\n"
+                    )
+                    yield error_frame
 
             return StreamingResponse(
-                generate(), media_type="multipart/x-mixed-replace; boundary=frame"
+                generate_stream(),
+                media_type="multipart/x-mixed-replace; boundary=frame",
             )
 
         except Exception as e:
