@@ -1,0 +1,35 @@
+{
+    "camera": {
+        "chdkptp_location": "/home/arrumada/Dev/CanonCameraControl/ChdkPTP",
+        "output_directory": "/home/arrumada/Images",
+        "frame_file_name": "frame.ppm",
+        "default_jpeg_quality": 80,
+        "max_framerate": 8.0,
+        "command_timeout": 30
+    },
+    "image_processing": {
+        "default_jpeg_quality": 80,
+        "timestamp_font_scale": 0.7,
+        "timestamp_font_thickness": 2,
+        "timestamp_color": [
+            255,
+            255,
+            255
+        ],
+        "timestamp_outline_color": [
+            0,
+            0,
+            0
+        ]
+    },
+    "environment": {
+        "environment": "development",
+        "debug": false,
+        "log_level": "INFO",
+        "log_format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        "enable_authentication": false,
+        "api_key_required": false,
+        "max_concurrent_streams": 5,
+        "stream_buffer_size": 1048576
+    }
+}

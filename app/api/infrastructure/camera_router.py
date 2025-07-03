@@ -1,23 +1,24 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
-from fastapi.responses import FileResponse, StreamingResponse
-import os
-from datetime import datetime
-import io
+from fastapi.responses import StreamingResponse, Response
+import logging
 
 from ...camera.application.use_cases import (
-    ShootCameraUseCase,
-    ExecuteCommandUseCase,
-    ExecuteCommandRequest,
-    TakeLiveViewSnapshotUseCase,
-    TakeLiveViewSnapshotRequest,
-    StartLiveViewStreamUseCase,
-    StartLiveViewStreamRequest,
+    CameraShootingUseCase,
+    CameraStatusUseCase,
+    LiveViewSnapshotUseCase,
+    LiveViewStreamUseCase,
 )
-from ...camera.infrastructure.chdkptp_camera_service import (
-    CHDKPTPCameraService,
+from ...camera.domain.entities import (
+    CameraShootingRequest,
+    CameraStatusRequest,
+    LiveViewSnapshotRequest,
+    LiveViewStreamRequest,
+    LiveViewStream,
 )
+from ...camera.infrastructure.container import get_camera_container
+from ...camera.infrastructure.error_handling_service import get_error_handling_service
 
 
 class ShootCameraResponseModel(BaseModel):
@@ -66,300 +67,422 @@ class ListImagesResponseModel(BaseModel):
 def create_camera_router() -> APIRouter:
     """Create and configure the camera router."""
     router = APIRouter(prefix="/camera", tags=["camera"])
+    logger = logging.getLogger(__name__)
 
-    # Initialize camera dependencies
-    camera_service = CHDKPTPCameraService()
-    shoot_camera_use_case = ShootCameraUseCase(camera_service)
-    execute_command_use_case = ExecuteCommandUseCase(camera_service)
-    take_live_view_snapshot_use_case = TakeLiveViewSnapshotUseCase(camera_service)
-    start_live_view_stream_use_case = StartLiveViewStreamUseCase(camera_service)
+    def get_camera_container_dependency():
+        """Dependency to get camera container."""
+        return get_camera_container()
 
-    @router.post("/quick-shoot", response_model=ShootCameraResponseModel)
-    async def shoot_camera():
-        """Shoot camera in auto mode."""
+    def get_error_handling_service_dependency():
+        """Dependency to get error handling service."""
+        return get_error_handling_service()
+
+    @router.post("/shoot")
+    async def shoot_camera(
+        request: Request,
+        container=Depends(get_camera_container_dependency),
+        error_service=Depends(get_error_handling_service_dependency),
+    ):
+        """Take a single photo with the camera."""
+        request_id = str(request.headers.get("X-Request-ID", ""))
+
         try:
-            response = await shoot_camera_use_case.execute()
+            logger.info("📸 Starting camera shooting")
 
-            return ShootCameraResponseModel(
-                success=response.success,
-                message=response.message,
-                shooting_id=response.shooting_id,
-                image_path=response.image_path,
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            use_case = CameraShootingUseCase(container.camera_service)
+            request_data = CameraShootingRequest()
 
-    @router.post("/command", response_model=ExecuteCommandResponseModel)
-    async def execute_command(request: ExecuteCommandRequestModel):
-        """Execute a camera command."""
-        try:
-            response = await execute_command_use_case.execute(
-                ExecuteCommandRequest(
-                    command_type=request.command_type,
-                    parameters=request.parameters,
+            result = await use_case.execute(request_data)
+
+            if result.is_success:
+                logger.info(f"✅ Camera shooting successful: {result.value.message}")
+                return error_service.create_success_response(
+                    {
+                        "message": result.value.message,
+                        "shooting_id": result.value.shooting_id,
+                        "image_path": result.value.image_path,
+                        "timestamp": result.value.timestamp.isoformat()
+                        if result.value.timestamp
+                        else None,
+                    },
+                    request_id,
                 )
-            )
-
-            return ExecuteCommandResponseModel(
-                success=response.success,
-                message=response.message,
-                shooting_id=response.shooting_id,
-                image_path=response.image_path,
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @router.get("/last-picture")
-    async def get_last_picture():
-        """Get the last picture taken by the camera as a file download."""
-        try:
-            # Get the latest image from the camera service
-            image_path = camera_service._get_latest_image()
-
-            if not image_path:
-                raise HTTPException(status_code=404, detail="No pictures found")
-
-            # The image_path is already the full path, no need to construct it
-            if not os.path.exists(image_path):
-                raise HTTPException(status_code=404, detail="Image file not found")
-
-            # Extract filename and get file metadata
-            filename = os.path.basename(image_path)
-            file_size = os.path.getsize(image_path)
-            modified_time = datetime.fromtimestamp(
-                os.path.getmtime(image_path)
-            ).isoformat()
-
-            # Create headers with metadata and cache-busting
-            headers = {
-                "Content-Disposition": f"inline; filename={filename}",
-                "X-Filename": filename,
-                "X-File-Size": str(file_size),
-                "X-Modified-Time": modified_time,
-                "X-Image-Path": image_path,
-                # Cache-busting headers
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0",
-                "ETag": f'"{file_size}-{int(os.path.getmtime(image_path))}"',
-            }
-
-            # Return the image file directly
-            return FileResponse(image_path, headers=headers)
+            else:
+                logger.error(f"❌ Camera shooting failed: {result.error}")
+                error_response = error_service.handle_error(
+                    Exception(result.error),
+                    {"operation": "camera_shooting"},
+                    request_id,
+                )
+                raise HTTPException(status_code=500, detail=error_response.dict())
 
         except HTTPException:
-            # Re-raise HTTP exceptions as-is
             raise
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"❌ Unexpected error in camera shooting: {e}")
+            error_response = error_service.handle_error(
+                e, {"operation": "camera_shooting"}, request_id
+            )
+            raise HTTPException(status_code=500, detail=error_response.dict())
+
+    @router.get("/status")
+    async def get_camera_status(
+        request: Request,
+        container=Depends(get_camera_container_dependency),
+        error_service=Depends(get_error_handling_service_dependency),
+    ):
+        """Get the current status of the camera."""
+        request_id = str(request.headers.get("X-Request-ID", ""))
+
+        try:
+            logger.info("📊 Getting camera status")
+
+            use_case = CameraStatusUseCase(container.camera_service)
+            request_data = CameraStatusRequest()
+
+            result = await use_case.execute(request_data)
+
+            if result.is_success:
+                status = result.value
+                logger.info(
+                    f"✅ Camera status retrieved: connected={status.is_connected}"
+                )
+                return error_service.create_success_response(
+                    {
+                        "is_connected": status.is_connected,
+                        "is_recording": status.is_recording,
+                        "current_mode": status.current_mode,
+                        "battery_level": status.battery_level,
+                        "storage_available": status.storage_available,
+                    },
+                    request_id,
+                )
+            else:
+                logger.error(f"❌ Failed to get camera status: {result.error}")
+                error_response = error_service.handle_error(
+                    Exception(result.error), {"operation": "camera_status"}, request_id
+                )
+                raise HTTPException(status_code=500, detail=error_response.dict())
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Unexpected error getting camera status: {e}")
+            error_response = error_service.handle_error(
+                e, {"operation": "camera_status"}, request_id
+            )
+            raise HTTPException(status_code=500, detail=error_response.dict())
 
     @router.get("/live-view/snapshot")
-    async def take_live_view_snapshot():
+    async def take_live_view_snapshot(
+        request: Request,
+        quality: Optional[int] = Query(None, description="JPEG quality (1-100)"),
+        container=Depends(get_camera_container_dependency),
+        error_service=Depends(get_error_handling_service_dependency),
+    ):
         """Take a live view snapshot."""
-        try:
-            response = await take_live_view_snapshot_use_case.execute(
-                TakeLiveViewSnapshotRequest(include_overlay=False)
-            )
+        request_id = str(request.headers.get("X-Request-ID", ""))
 
-            if response.success and response.image_data:
-                return StreamingResponse(
-                    io.BytesIO(response.image_data),
-                    media_type="image/jpeg",
-                    headers={"X-Success": "true", "X-Message": response.message},
+        try:
+            logger.info(f"📸 Taking live view snapshot with quality={quality}")
+
+            # Get default quality from configuration if not provided
+            if quality is None:
+                image_config = container.image_config
+                if image_config:
+                    quality = image_config.default_jpeg_quality
+                else:
+                    quality = 80  # Fallback default
+
+            use_case = LiveViewSnapshotUseCase(container.camera_service)
+            request_data = LiveViewSnapshotRequest(quality=quality)
+
+            result = await use_case.execute(request_data)
+
+            if result.is_success:
+                live_view_result = result.value
+                logger.info(
+                    f"✅ Live view snapshot successful: {live_view_result.message}"
+                )
+
+                # Add cache-busting headers to prevent browser caching
+                headers = {
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                    "X-Request-ID": request_id,
+                }
+
+                return Response(
+                    content=live_view_result.image_data,
+                    media_type=f"image/{live_view_result.image_format}",
+                    headers=headers,
                 )
             else:
-                raise HTTPException(status_code=500, detail=response.message)
+                logger.error(f"❌ Live view snapshot failed: {result.error}")
+                error_response = error_service.handle_error(
+                    Exception(result.error),
+                    {"operation": "live_view_snapshot", "quality": quality},
+                    request_id,
+                )
+                raise HTTPException(status_code=500, detail=error_response.dict())
 
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"❌ Unexpected error in live view snapshot: {e}")
+            error_response = error_service.handle_error(
+                e, {"operation": "live_view_snapshot", "quality": quality}, request_id
+            )
+            raise HTTPException(status_code=500, detail=error_response.dict())
 
     @router.get("/live-view/stream")
-    async def start_live_view_stream(framerate: float = 5.0, quality: int = 80):
-        """Start a live view stream.
+    async def start_live_view_stream(
+        request: Request,
+        framerate: Optional[float] = Query(
+            None, description="Frames per second (0.1-8.0)"
+        ),
+        quality: Optional[int] = Query(None, description="JPEG quality (1-100)"),
+        container=Depends(get_camera_container_dependency),
+        error_service=Depends(get_error_handling_service_dependency),
+    ):
+        """Start a live view stream."""
+        request_id = str(request.headers.get("X-Request-ID", ""))
 
-        Args:
-            framerate: Target frames per second (must be > 0, default: 5.0)
-            quality: JPEG quality (1-100, default: 80)
-        """
         try:
+            logger.info(
+                f"🎥 Starting live view stream with framerate={framerate}, quality={quality}"
+            )
+
+            # Get default values from configuration if not provided
+            if framerate is None:
+                camera_config = container.camera_config
+                if camera_config:
+                    framerate = camera_config.max_framerate
+                else:
+                    framerate = 5.0  # Fallback default
+
+            if quality is None:
+                image_config = container.image_config
+                if image_config:
+                    quality = image_config.default_jpeg_quality
+                else:
+                    quality = 80  # Fallback default
+
             # Validate parameters
-            if framerate <= 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Framerate must be greater than 0",
+            if framerate < 0.1 or framerate > 8.0:
+                error_response = error_service.handle_error(
+                    ValueError("Framerate must be between 0.1 and 8.0 FPS"),
+                    {
+                        "operation": "live_view_stream",
+                        "framerate": framerate,
+                        "quality": quality,
+                    },
+                    request_id,
                 )
+                raise HTTPException(status_code=400, detail=error_response.dict())
+
             if quality < 1 or quality > 100:
-                raise HTTPException(
-                    status_code=400, detail="Quality must be between 1 and 100"
+                error_response = error_service.handle_error(
+                    ValueError("JPEG quality must be between 1 and 100"),
+                    {
+                        "operation": "live_view_stream",
+                        "framerate": framerate,
+                        "quality": quality,
+                    },
+                    request_id,
                 )
-            import logging
+                raise HTTPException(status_code=400, detail=error_response.dict())
 
-            logger = logging.getLogger(__name__)
-            logger.info("Client connected to live view stream.")
-
-            async def generate_stream():
-                try:
-                    request = StartLiveViewStreamRequest(
-                        framerate=framerate, quality=quality
-                    )
-                    async for result in start_live_view_stream_use_case.execute(
-                        request
-                    ):
-                        if result.success and result.image_data:
-                            yield (
-                                b"--frame\r\n"
-                                b"Content-Type: image/jpeg\r\n\r\n"
-                                + result.image_data
-                                + b"\r\n"
-                            )
-                        else:
-                            # Send error frame
-                            error_frame = (
-                                b"--frame\r\n"
-                                b"Content-Type: text/plain\r\n\r\n"
-                                + result.message.encode()
-                                + b"\r\n"
-                            )
-                            yield error_frame
-                except Exception as e:
-                    logger.error(f"Error in live view stream: {e}")
-                    error_frame = (
-                        b"--frame\r\n"
-                        b"Content-Type: text/plain\r\n\r\n"
-                        + f"Stream error: {str(e)}".encode()
-                        + b"\r\n"
-                    )
-                    yield error_frame
-
-            return StreamingResponse(
-                generate_stream(),
-                media_type="multipart/x-mixed-replace; boundary=frame",
+            use_case = LiveViewStreamUseCase(container.camera_service)
+            request_data = LiveViewStreamRequest(
+                stream_config=LiveViewStream(framerate=framerate, quality=quality)
             )
 
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            result = await use_case.execute(request_data)
 
-    @router.get("/snapshot")
-    async def take_snapshot():
-        """Take a snapshot with viewfinder frame."""
-        try:
-            import subprocess
-            import cv2
-            import logging
+            if result.is_success:
+                logger.info("✅ Live view stream started successfully")
 
-            logger = logging.getLogger(__name__)
-            logger.info("Taking snapshot with viewfinder frame...")
+                # Add cache-busting headers
+                headers = {
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                    "X-Request-ID": request_id,
+                }
 
-            # Get CHDKPTP paths from camera service
-            chdkptp_script = str(camera_service.chdkptp_location / "chdkptp.sh")
-            chdkptp_dir = str(camera_service.chdkptp_location)
-            frame_path = str(camera_service._frame_path)
-
-            subprocess.run(
-                [
-                    "sudo",
-                    chdkptp_script,
-                    "-c",
-                    "-e",
-                    "rec",
-                    "-e",
-                    "lvdumpimg -vp=frame.ppm -bm=overlay.pam -count=1",
-                ],
-                cwd=chdkptp_dir,
-                check=True,
-            )
-
-            image = cv2.imread(frame_path)
-            if image is None:
-                logger.error("Could not read frame.ppm")
-                raise HTTPException(status_code=500, detail="Snapshot failed")
-
-            _, buffer = cv2.imencode(".jpg", image)
-            jpg_io = io.BytesIO(buffer.tobytes())
-
-            logger.info("Snapshot captured and converted to JPEG.")
-            return StreamingResponse(jpg_io, media_type="image/jpeg")
-
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Snapshot command failed: {e}")
-            raise HTTPException(status_code=500, detail="Snapshot command failed.")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @router.post("/live-view/stop")
-    async def stop_live_view_stream():
-        """Stop the live view stream."""
-        try:
-            await camera_service.stop_live_view_stream()
-            return {"success": True, "message": "Live view stream stopped"}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @router.get("/images", response_model=ListImagesResponseModel)
-    async def list_images():
-        """List all images in the camera output directory."""
-        try:
-            # Look for common image extensions
-            image_extensions = [".jpg", ".jpeg", ".cr2", ".raw"]
-            images = []
-
-            output_directory = camera_service.output_directory
-
-            if output_directory.exists():
-                for ext in image_extensions:
-                    for file_path in output_directory.glob(f"*{ext}"):
-                        try:
-                            # Get file stats
-                            stat = file_path.stat()
-
-                            # Create image info
-                            image_info = ImageInfoModel(
-                                filename=file_path.name,
-                                size_bytes=stat.st_size,
-                                modified_time=datetime.fromtimestamp(
-                                    stat.st_mtime
-                                ).isoformat(),
-                                image_url=f"/camera/images/{file_path.name}",
-                            )
-                            images.append(image_info)
-                        except Exception:
-                            # Skip files that can't be read
-                            continue
-
-                # Sort by modification time (newest first)
-                images.sort(key=lambda x: x.modified_time, reverse=True)
-
-                return ListImagesResponseModel(
-                    success=True,
-                    message=f"Found {len(images)} images",
-                    images=images,
-                    total_count=len(images),
+                return StreamingResponse(
+                    result.value,
+                    media_type="multipart/x-mixed-replace; boundary=frame",
+                    headers=headers,
                 )
             else:
-                return ListImagesResponseModel(
-                    success=False,
-                    message="Output directory not found",
-                    images=[],
-                    total_count=0,
+                logger.error(f"❌ Live view stream failed: {result.error}")
+                error_response = error_service.handle_error(
+                    Exception(result.error),
+                    {
+                        "operation": "live_view_stream",
+                        "framerate": framerate,
+                        "quality": quality,
+                    },
+                    request_id,
                 )
+                raise HTTPException(status_code=500, detail=error_response.dict())
 
+        except HTTPException:
+            raise
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"❌ Unexpected error in live view stream: {e}")
+            error_response = error_service.handle_error(
+                e,
+                {
+                    "operation": "live_view_stream",
+                    "framerate": framerate,
+                    "quality": quality,
+                },
+                request_id,
+            )
+            raise HTTPException(status_code=500, detail=error_response.dict())
 
-    @router.get("/images/{image_path:path}")
-    async def get_image(image_path: str):
-        """Serve a captured image."""
+    @router.get("/last-picture")
+    async def get_last_picture(
+        request: Request,
+        container=Depends(get_camera_container_dependency),
+        error_service=Depends(get_error_handling_service_dependency),
+    ):
+        """Get the last picture taken by the camera."""
+        request_id = str(request.headers.get("X-Request-ID", ""))
+
         try:
-            # Construct the full path to the image
-            full_path = f"/home/arrumada/Images/{image_path}"
+            logger.info("🖼️ Getting last picture")
 
-            if not os.path.exists(full_path):
-                raise HTTPException(status_code=404, detail="Image not found")
+            # This would typically use a use case, but for now we'll access the service directly
+            # In a full implementation, you'd create a GetLastPictureUseCase
 
-            return FileResponse(full_path)
+            # For now, return a placeholder response
+            # TODO: Implement proper last picture retrieval
+            error_response = error_service.handle_error(
+                NotImplementedError("Last picture retrieval not yet implemented"),
+                {"operation": "get_last_picture"},
+                request_id,
+            )
+            raise HTTPException(status_code=501, detail=error_response.dict())
+
+        except HTTPException:
+            raise
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"❌ Unexpected error getting last picture: {e}")
+            error_response = error_service.handle_error(
+                e, {"operation": "get_last_picture"}, request_id
+            )
+            raise HTTPException(status_code=500, detail=error_response.dict())
+
+    @router.get("/configuration")
+    async def get_configuration(
+        request: Request,
+        container=Depends(get_camera_container_dependency),
+        error_service=Depends(get_error_handling_service_dependency),
+    ):
+        """Get current application configuration."""
+        request_id = str(request.headers.get("X-Request-ID", ""))
+
+        try:
+            logger.info("⚙️ Getting application configuration")
+
+            config_service = container.configuration_service
+            if not config_service:
+                error_response = error_service.handle_error(
+                    RuntimeError("Configuration service not available"),
+                    {"operation": "get_configuration"},
+                    request_id,
+                )
+                raise HTTPException(status_code=500, detail=error_response.dict())
+
+            config = config_service.configuration
+            if not config:
+                error_response = error_service.handle_error(
+                    RuntimeError("Configuration not loaded"),
+                    {"operation": "get_configuration"},
+                    request_id,
+                )
+                raise HTTPException(status_code=500, detail=error_response.dict())
+
+            return error_service.create_success_response(
+                {
+                    "camera": {
+                        "chdkptp_location": config.camera.chdkptp_location,
+                        "output_directory": config.camera.output_directory,
+                        "frame_file_name": config.camera.frame_file_name,
+                        "default_jpeg_quality": config.camera.default_jpeg_quality,
+                        "max_framerate": config.camera.max_framerate,
+                        "command_timeout": config.camera.command_timeout,
+                    },
+                    "image_processing": {
+                        "default_jpeg_quality": config.image_processing.default_jpeg_quality,
+                        "timestamp_font_scale": config.image_processing.timestamp_font_scale,
+                        "timestamp_font_thickness": config.image_processing.timestamp_font_thickness,
+                        "timestamp_color": config.image_processing.timestamp_color,
+                        "timestamp_outline_color": config.image_processing.timestamp_outline_color,
+                    },
+                    "environment": {
+                        "environment": config.environment.environment,
+                        "debug": config.environment.debug,
+                        "log_level": config.environment.log_level,
+                        "log_format": config.environment.log_format,
+                        "enable_authentication": config.environment.enable_authentication,
+                        "api_key_required": config.environment.api_key_required,
+                        "max_concurrent_streams": config.environment.max_concurrent_streams,
+                        "stream_buffer_size": config.environment.stream_buffer_size,
+                    },
+                },
+                request_id,
+            )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Unexpected error getting configuration: {e}")
+            error_response = error_service.handle_error(
+                e, {"operation": "get_configuration"}, request_id
+            )
+            raise HTTPException(status_code=500, detail=error_response.dict())
+
+    @router.post("/configuration/reload")
+    async def reload_configuration(
+        request: Request,
+        container=Depends(get_camera_container_dependency),
+        error_service=Depends(get_error_handling_service_dependency),
+    ):
+        """Reload application configuration."""
+        request_id = str(request.headers.get("X-Request-ID", ""))
+
+        try:
+            logger.info("🔄 Reloading application configuration")
+
+            success = container.reload_configuration()
+
+            if success:
+                logger.info("✅ Configuration reloaded successfully")
+                return error_service.create_success_response(
+                    {"message": "Configuration reloaded successfully"}, request_id
+                )
+            else:
+                logger.error("❌ Failed to reload configuration")
+                error_response = error_service.handle_error(
+                    RuntimeError("Failed to reload configuration"),
+                    {"operation": "reload_configuration"},
+                    request_id,
+                )
+                raise HTTPException(status_code=500, detail=error_response.dict())
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Unexpected error reloading configuration: {e}")
+            error_response = error_service.handle_error(
+                e, {"operation": "reload_configuration"}, request_id
+            )
+            raise HTTPException(status_code=500, detail=error_response.dict())
 
     return router

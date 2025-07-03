@@ -11,9 +11,7 @@ from app.background.infrastructure.sun_event_monitor_service import (
     SunEventMonitorService,
 )
 from app.background.infrastructure.sun_event_orchestrator import SunEventOrchestrator
-from app.camera.infrastructure.chdkptp_camera_service import (
-    CHDKPTPCameraService,
-)
+from app.camera.infrastructure.container import get_camera_container
 from app.sun_events.infrastructure.json_repository import JSONSunEventRepository
 from app.timelapse.application.use_cases import CalculateTimelapseUseCase
 from app.video_processing.infrastructure.ffmpeg_video_processor import (
@@ -45,8 +43,9 @@ async def lifespan(app: FastAPI):
     # Initialize timelapse use case
     timelapse_use_case = CalculateTimelapseUseCase(sun_event_repository)
 
-    # Initialize camera services
-    camera_service = CHDKPTPCameraService()
+    # Initialize camera services using DI container
+    camera_container = get_camera_container()
+    camera_service = camera_container.camera_service
 
     # Initialize video processor
     video_processor = FFmpegVideoProcessor()
