@@ -180,14 +180,16 @@ def create_camera_router() -> APIRouter:
         """Start a live view stream.
 
         Args:
-            framerate: Target frames per second (0.1-30.0, default: 5.0)
+            framerate: Target frames per second (0.1-8.0, default: 5.0)
+                      Note: Camera hardware limited to max 8 FPS
             quality: JPEG quality (1-100, default: 80)
         """
         try:
             # Validate parameters
-            if framerate < 0.1 or framerate > 30.0:
+            if framerate < 0.1 or framerate > 8.0:
                 raise HTTPException(
-                    status_code=400, detail="Framerate must be 0.1-30.0 FPS"
+                    status_code=400,
+                    detail="Framerate must be 0.1-8.0 FPS (camera max: 8 FPS)",
                 )
             if quality < 1 or quality > 100:
                 raise HTTPException(

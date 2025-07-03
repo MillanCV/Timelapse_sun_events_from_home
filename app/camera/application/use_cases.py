@@ -54,8 +54,8 @@ class TakeLiveViewSnapshotResponse:
 class StartLiveViewStreamRequest:
     """Request for starting a live view stream."""
 
-    framerate: float = 5.0  # FPS
-    quality: int = 80  # JPEG quality (1-100), default 80
+    framerate: float = 5.0
+    quality: int = 80
 
 
 class ShootCameraUseCase:

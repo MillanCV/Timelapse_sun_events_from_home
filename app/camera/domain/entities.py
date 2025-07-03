@@ -49,5 +49,5 @@ class LiveViewResult:
 class LiveViewStream:
     """Domain entity for live view stream configuration."""
 
-    framerate: float = 5.0  # FPS
+    framerate: float = 5.0  # FPS (max: 8 FPS due to camera hardware)
     quality: int = 80  # JPEG quality (1-100), default 80

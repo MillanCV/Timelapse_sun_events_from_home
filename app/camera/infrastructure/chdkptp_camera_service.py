@@ -343,6 +343,42 @@ class CHDKPTPCameraService(CameraControlService):
                     self.logger.info(f"🎥 Image dtype: {image.dtype}")
                     self.logger.info(f"🎥 Image size: {image.size}")
 
+                    # Overlay datetime with milliseconds
+                    now = datetime.now()
+                    timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S.%f")[
+                        :-3
+                    ]  # trim to ms
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    font_scale = 0.7
+                    font_thickness = 2
+                    text_size, _ = cv2.getTextSize(
+                        timestamp_str, font, font_scale, font_thickness
+                    )
+                    text_x = 10
+                    text_y = image.shape[0] - 10
+                    # Draw black outline
+                    cv2.putText(
+                        image,
+                        timestamp_str,
+                        (text_x, text_y),
+                        font,
+                        font_scale,
+                        (0, 0, 0),
+                        font_thickness + 2,
+                        cv2.LINE_AA,
+                    )
+                    # Draw white text
+                    cv2.putText(
+                        image,
+                        timestamp_str,
+                        (text_x, text_y),
+                        font,
+                        font_scale,
+                        (255, 255, 255),
+                        font_thickness,
+                        cv2.LINE_AA,
+                    )
+
                     # Convert to JPEG with configured quality
                     self.logger.info(
                         f"🎥 Converting to JPEG with quality {config.quality}..."
