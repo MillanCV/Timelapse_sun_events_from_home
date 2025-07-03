@@ -503,26 +503,58 @@ class CHDKPTPCameraService(CameraControlService):
     def _get_latest_image(self) -> Optional[str]:
         """Get the latest image from the output directory."""
         try:
+            self.logger.info(
+                f"🔍 _get_latest_image: checking directory {self.output_directory}"
+            )
+
             # Look for common image extensions
             image_extensions = [".jpg", ".jpeg", ".cr2", ".raw"]
             image_paths = []
 
             # Get all files in the output directory
             if self.output_directory.exists():
+                self.logger.info(f"🔍 Output directory exists: {self.output_directory}")
+
+                # List all files in directory for debugging
+                all_files = list(self.output_directory.iterdir())
+                self.logger.info(
+                    f"🔍 All files in directory: {[f.name for f in all_files]}"
+                )
+
                 for ext in image_extensions:
-                    image_paths.extend(
-                        [str(f) for f in self.output_directory.glob(f"*{ext}")]
+                    found_files = list(self.output_directory.glob(f"*{ext}"))
+                    self.logger.info(
+                        f"🔍 Found {len(found_files)} files with extension {ext}: {[f.name for f in found_files]}"
                     )
+                    image_paths.extend([str(f) for f in found_files])
 
-                # Sort by modification time (newest first) and return the
-                # latest
-                image_paths.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+                self.logger.info(f"🔍 Total image files found: {len(image_paths)}")
 
-                # Return the most recent image
-                self.logger.info(f"_get_latest_image: {image_paths}")
-                return image_paths[0] if image_paths else None
+                if image_paths:
+                    # Sort by modification time (newest first) and return the
+                    # latest
+                    image_paths.sort(key=lambda x: os.path.getmtime(x), reverse=True)
 
-            return None
+                    # Log the top 5 most recent images
+                    self.logger.info("🔍 Top 5 most recent images:")
+                    for i, path in enumerate(image_paths[:5]):
+                        mtime = os.path.getmtime(path)
+                        self.logger.info(
+                            f"🔍   {i + 1}. {path} (modified: {datetime.fromtimestamp(mtime)})"
+                        )
+
+                    latest = image_paths[0]
+                    self.logger.info(f"🔍 Returning latest image: {latest}")
+                    return latest
+                else:
+                    self.logger.warning("🔍 No image files found in output directory")
+                    return None
+            else:
+                self.logger.error(
+                    f"🔍 Output directory does not exist: {self.output_directory}"
+                )
+                return None
+
         except Exception as e:
             self.logger.error(f"Error getting latest image: {e}")
             return None

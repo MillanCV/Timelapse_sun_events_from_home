@@ -130,13 +130,18 @@ def create_camera_router() -> APIRouter:
                 os.path.getmtime(image_path)
             ).isoformat()
 
-            # Create headers with metadata
+            # Create headers with metadata and cache-busting
             headers = {
                 "Content-Disposition": f"inline; filename={filename}",
                 "X-Filename": filename,
                 "X-File-Size": str(file_size),
                 "X-Modified-Time": modified_time,
                 "X-Image-Path": image_path,
+                # Cache-busting headers
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+                "ETag": f'"{file_size}-{int(os.path.getmtime(image_path))}"',
             }
 
             # Return the image file directly
