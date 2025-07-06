@@ -300,7 +300,7 @@ def create_camera_router() -> APIRouter:
             logger.info("🖼️ Getting last picture")
 
             # Get the file management service from the container
-            file_service = container.file_management_service
+            file_service = container.file_service
             if not file_service:
                 error_response = error_service.handle_error(
                     RuntimeError("File management service not available"),
