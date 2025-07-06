@@ -47,6 +47,7 @@ class ErrorType(Enum):
     PERMISSION_ERROR = "permission_error"
     TIMEOUT_ERROR = "timeout_error"
     RESOURCE_ERROR = "resource_error"
+    APPLICATION_ERROR = "application_error"
     UNKNOWN_ERROR = "unknown_error"
 
 
@@ -86,6 +87,7 @@ class ErrorResponse:
     details: Optional[Dict[str, Any]] = None
     timestamp: datetime = None
     request_id: Optional[str] = None
+    status_code: int = 500
 
     def __post_init__(self):
         if self.timestamp is None:

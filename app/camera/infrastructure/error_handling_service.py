@@ -37,6 +37,7 @@ class ErrorHandlingService:
             ErrorType.PERMISSION_ERROR: self._handle_permission_error,
             ErrorType.TIMEOUT_ERROR: self._handle_timeout_error,
             ErrorType.RESOURCE_ERROR: self._handle_resource_error,
+            ErrorType.APPLICATION_ERROR: self._handle_application_error,
             ErrorType.UNKNOWN_ERROR: self._handle_unknown_error,
         }
 
@@ -162,6 +163,7 @@ class ErrorHandlingService:
             code=details.code or "VALIDATION_ERROR",
             details=details.details,
             request_id=request_id,
+            status_code=400,
         )
 
     def _handle_configuration_error(
@@ -175,6 +177,7 @@ class ErrorHandlingService:
             code=details.code or "CONFIGURATION_ERROR",
             details=details.details,
             request_id=request_id,
+            status_code=500,
         )
 
     def _handle_camera_error(
@@ -188,6 +191,7 @@ class ErrorHandlingService:
             code=details.code or "CAMERA_ERROR",
             details=details.details,
             request_id=request_id,
+            status_code=500,
         )
 
     def _handle_chdkptp_error(
@@ -201,6 +205,7 @@ class ErrorHandlingService:
             code=details.code or "CHDKPTP_ERROR",
             details=details.details,
             request_id=request_id,
+            status_code=500,
         )
 
     def _handle_file_error(
@@ -214,6 +219,7 @@ class ErrorHandlingService:
             code=details.code or "FILE_ERROR",
             details=details.details,
             request_id=request_id,
+            status_code=500,
         )
 
     def _handle_network_error(
@@ -227,6 +233,7 @@ class ErrorHandlingService:
             code=details.code or "NETWORK_ERROR",
             details=details.details,
             request_id=request_id,
+            status_code=503,
         )
 
     def _handle_permission_error(
@@ -240,6 +247,7 @@ class ErrorHandlingService:
             code=details.code or "PERMISSION_ERROR",
             details=details.details,
             request_id=request_id,
+            status_code=403,
         )
 
     def _handle_timeout_error(
@@ -253,6 +261,7 @@ class ErrorHandlingService:
             code=details.code or "TIMEOUT_ERROR",
             details=details.details,
             request_id=request_id,
+            status_code=408,
         )
 
     def _handle_resource_error(
@@ -266,6 +275,21 @@ class ErrorHandlingService:
             code=details.code or "RESOURCE_ERROR",
             details=details.details,
             request_id=request_id,
+            status_code=503,
+        )
+
+    def _handle_application_error(
+        self, error: Exception, details: ErrorDetails, request_id: str
+    ) -> ErrorResponse:
+        """Handle application-related errors."""
+        return ErrorResponse(
+            success=False,
+            error_type=ErrorType.APPLICATION_ERROR.value,
+            message=details.message,
+            code=details.code or "APPLICATION_ERROR",
+            details=details.details,
+            request_id=request_id,
+            status_code=500,
         )
 
     def _handle_unknown_error(
@@ -279,6 +303,7 @@ class ErrorHandlingService:
             code=details.code or "UNKNOWN_ERROR",
             details=details.details,
             request_id=request_id,
+            status_code=500,
         )
 
     def register_error_handler(self, error_type: ErrorType, handler: Callable):
