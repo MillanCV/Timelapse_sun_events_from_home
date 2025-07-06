@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from fastapi.responses import StreamingResponse, Response
 import logging
+import os
 
 from ...camera.application.use_cases import (
     ShootCameraUseCase,
@@ -298,18 +299,71 @@ def create_camera_router() -> APIRouter:
         try:
             logger.info("🖼️ Getting last picture")
 
-            # This would typically use a use case, but for now we'll access
-            # the service directly
-            # In a full implementation, you'd create a GetLastPictureUseCase
+            # Get the file management service from the container
+            file_service = container.file_management_service
+            if not file_service:
+                error_response = error_service.handle_error(
+                    RuntimeError("File management service not available"),
+                    {"operation": "get_last_picture"},
+                    request_id,
+                )
+                raise HTTPException(status_code=500, detail=error_response.to_dict())
 
-            # For now, return a placeholder response
-            # TODO: Implement proper last picture retrieval
-            error_response = error_service.handle_error(
-                NotImplementedError("Last picture retrieval not yet implemented"),
-                {"operation": "get_last_picture"},
-                request_id,
+            # Get the output directory from configuration
+            camera_config = container.camera_config
+            if not camera_config:
+                error_response = error_service.handle_error(
+                    RuntimeError("Camera configuration not available"),
+                    {"operation": "get_last_picture"},
+                    request_id,
+                )
+                raise HTTPException(status_code=500, detail=error_response.to_dict())
+
+            # Get the latest image
+            latest_image_path = await file_service.get_latest_image(
+                camera_config.output_directory
             )
-            raise HTTPException(status_code=501, detail=error_response.to_dict())
+
+            if not latest_image_path:
+                error_response = error_service.handle_error(
+                    FileNotFoundError("No images found in the output directory"),
+                    {
+                        "operation": "get_last_picture",
+                        "directory": camera_config.output_directory,
+                    },
+                    request_id,
+                )
+                raise HTTPException(status_code=404, detail=error_response.to_dict())
+
+            # Read the image file
+            try:
+                with open(latest_image_path, "rb") as f:
+                    image_data = f.read()
+
+                logger.info(f"✅ Last picture retrieved: {latest_image_path}")
+
+                # Add cache-busting headers
+                headers = {
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                    "X-Request-ID": request_id,
+                    "Content-Disposition": f"attachment; filename={os.path.basename(latest_image_path)}",
+                }
+
+                return Response(
+                    content=image_data,
+                    media_type="image/jpeg",
+                    headers=headers,
+                )
+
+            except Exception as e:
+                error_response = error_service.handle_error(
+                    e,
+                    {"operation": "get_last_picture", "file_path": latest_image_path},
+                    request_id,
+                )
+                raise HTTPException(status_code=500, detail=error_response.to_dict())
 
         except HTTPException:
             raise
