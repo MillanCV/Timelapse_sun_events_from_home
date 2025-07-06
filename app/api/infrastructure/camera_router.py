@@ -12,7 +12,9 @@ from ...camera.application.use_cases import (
     StartLiveViewStreamRequest,
 )
 from ...camera.infrastructure.container import get_camera_container
-from ...camera.infrastructure.error_handling_service import get_error_handling_service
+from ...camera.infrastructure.error_handling_service import (
+    get_error_handling_service,
+)
 
 
 class ShootCameraResponseModel(BaseModel):
@@ -296,7 +298,8 @@ def create_camera_router() -> APIRouter:
         try:
             logger.info("🖼️ Getting last picture")
 
-            # This would typically use a use case, but for now we'll access the service directly
+            # This would typically use a use case, but for now we'll access
+            # the service directly
             # In a full implementation, you'd create a GetLastPictureUseCase
 
             # For now, return a placeholder response
@@ -353,7 +356,7 @@ def create_camera_router() -> APIRouter:
                         "chdkptp_location": config.camera.chdkptp_location,
                         "output_directory": config.camera.output_directory,
                         "frame_file_name": config.camera.frame_file_name,
-                        "default_jpeg_quality": config.camera.default_jpeg_quality,
+                        "default_jpeg_quality": (config.camera.default_jpeg_quality),
                         "max_framerate": config.camera.max_framerate,
                         "command_timeout": config.camera.command_timeout,
                     },
@@ -367,7 +370,7 @@ def create_camera_router() -> APIRouter:
                         "timestamp_font_thickness": (
                             config.image_processing.timestamp_font_thickness
                         ),
-                        "timestamp_color": config.image_processing.timestamp_color,
+                        "timestamp_color": (config.image_processing.timestamp_color),
                         "timestamp_outline_color": (
                             config.image_processing.timestamp_outline_color
                         ),
@@ -377,10 +380,14 @@ def create_camera_router() -> APIRouter:
                         "debug": config.environment.debug,
                         "log_level": config.environment.log_level,
                         "log_format": config.environment.log_format,
-                        "enable_authentication": config.environment.enable_authentication,
-                        "api_key_required": config.environment.api_key_required,
-                        "max_concurrent_streams": config.environment.max_concurrent_streams,
-                        "stream_buffer_size": config.environment.stream_buffer_size,
+                        "enable_authentication": (
+                            config.environment.enable_authentication
+                        ),
+                        "api_key_required": (config.environment.api_key_required),
+                        "max_concurrent_streams": (
+                            config.environment.max_concurrent_streams
+                        ),
+                        "stream_buffer_size": (config.environment.stream_buffer_size),
                     },
                 },
                 request_id,
@@ -412,7 +419,8 @@ def create_camera_router() -> APIRouter:
             if success:
                 logger.info("✅ Configuration reloaded successfully")
                 return error_service.create_success_response(
-                    {"message": "Configuration reloaded successfully"}, request_id
+                    {"message": "Configuration reloaded successfully"},
+                    request_id,
                 )
             else:
                 logger.error("❌ Failed to reload configuration")

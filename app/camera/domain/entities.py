@@ -50,6 +50,15 @@ class ErrorType(Enum):
     UNKNOWN_ERROR = "unknown_error"
 
 
+class ErrorSeverity(Enum):
+    """Error severity enumeration for prioritizing error handling."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
 @dataclass
 class ErrorDetails:
     """Detailed error information."""
