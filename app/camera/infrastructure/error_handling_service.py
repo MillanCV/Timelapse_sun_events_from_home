@@ -1,7 +1,7 @@
 import logging
 import traceback
 import uuid
-from typing import Optional, Dict, Any, Callable, Protocol
+from typing import Optional, Dict, Any
 from functools import wraps
 from datetime import datetime
 
@@ -17,20 +17,12 @@ from ..domain.entities import (
 )
 
 
-class ErrorHandler(Protocol):
-    """Protocol for error handler functions."""
-
-    def __call__(
-        self, error: Exception, details: ErrorDetails, request_id: str
-    ) -> ErrorResponse: ...
-
-
 class ErrorHandlingService:
     """Centralized error handling service for the camera module."""
 
     def __init__(self, logger: Optional[logging.Logger] = None):
         self.logger = logger or logging.getLogger(__name__)
-        self._error_handlers: Dict[ErrorType, ErrorHandler] = {}
+        self._error_handlers: Dict[ErrorType, Any] = {}
         self._setup_default_handlers()
 
     def _setup_default_handlers(self):
@@ -314,7 +306,7 @@ class ErrorHandlingService:
             status_code=500,
         )
 
-    def register_error_handler(self, error_type: ErrorType, handler: Callable):
+    def register_error_handler(self, error_type: ErrorType, handler: Any):
         """Register a custom error handler for a specific error type."""
         self._error_handlers[error_type] = handler
 
@@ -380,9 +372,7 @@ class ErrorHandlingService:
         if context:
             self.logger.debug(f"Error context [{request_id}]: {context}")
 
-    def wrap_async_function(
-        self, func: Callable, context: Optional[Dict[str, Any]] = None
-    ):
+    def wrap_async_function(self, func: Any, context: Optional[Dict[str, Any]] = None):
         """Decorator to wrap async functions with error handling."""
 
         @wraps(func)
@@ -397,9 +387,7 @@ class ErrorHandlingService:
 
         return wrapper
 
-    def wrap_sync_function(
-        self, func: Callable, context: Optional[Dict[str, Any]] = None
-    ):
+    def wrap_sync_function(self, func: Any, context: Optional[Dict[str, Any]] = None):
         """Decorator to wrap sync functions with error handling."""
 
         @wraps(func)
@@ -439,7 +427,7 @@ def reset_error_handling_service() -> None:
 def handle_errors(context: Optional[Dict[str, Any]] = None):
     """Decorator to add error handling to async functions."""
 
-    def decorator(func: Callable):
+    def decorator(func: Any):
         return get_error_handling_service().wrap_async_function(func, context)
 
     return decorator
@@ -448,7 +436,7 @@ def handle_errors(context: Optional[Dict[str, Any]] = None):
 def handle_sync_errors(context: Optional[Dict[str, Any]] = None):
     """Decorator to add error handling to sync functions."""
 
-    def decorator(func: Callable):
+    def decorator(func: Any):
         return get_error_handling_service().wrap_sync_function(func, context)
 
     return decorator
