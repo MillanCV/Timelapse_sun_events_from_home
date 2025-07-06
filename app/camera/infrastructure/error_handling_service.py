@@ -7,6 +7,7 @@ from datetime import datetime
 
 from ..domain.entities import (
     ErrorType,
+    ErrorSeverity,
     ErrorDetails,
     ErrorResponse,
     CameraControlError,
@@ -297,6 +298,54 @@ class ErrorHandlingService:
             "timestamp": datetime.now().isoformat(),
             "request_id": request_id,
         }
+
+    def generate_request_id(self) -> str:
+        """Generate a unique request ID."""
+        return str(uuid.uuid4())
+
+    def handle_exception(
+        self,
+        exc: Exception,
+        request_id: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> ErrorResponse:
+        """Handle an exception and return a standardized error response."""
+        if not request_id:
+            request_id = self.generate_request_id()
+
+        return self.handle_error(exc, context, request_id)
+
+    def record_error(
+        self,
+        error_type: ErrorType,
+        message: str,
+        severity: ErrorSeverity,
+        request_id: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Record an error for logging and monitoring purposes."""
+        if not request_id:
+            request_id = self.generate_request_id()
+
+        # Log the error with appropriate level based on severity
+        log_message = (
+            f"Error [{request_id}] - Type: {error_type.value}, "
+            f"Severity: {severity.value}, Message: {message}"
+        )
+
+        if severity.value == "low":
+            self.logger.warning(log_message)
+        elif severity.value == "medium":
+            self.logger.error(log_message)
+        elif severity.value == "high":
+            self.logger.error(log_message)
+        elif severity.value == "critical":
+            self.logger.critical(log_message)
+        else:
+            self.logger.error(log_message)
+
+        if context:
+            self.logger.debug(f"Error context [{request_id}]: {context}")
 
     def wrap_async_function(
         self, func: Callable, context: Optional[Dict[str, Any]] = None
