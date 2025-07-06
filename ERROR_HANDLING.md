@@ -74,7 +74,7 @@ async def shoot_camera(
                 {"operation": "camera_shooting"}, 
                 request_id
             )
-            raise HTTPException(status_code=500, detail=error_response.dict())
+            raise HTTPException(status_code=500, detail=error_response.to_dict())
             
     except HTTPException:
         raise
@@ -84,7 +84,7 @@ async def shoot_camera(
             {"operation": "camera_shooting"}, 
             request_id
         )
-        raise HTTPException(status_code=500, detail=error_response.dict())
+        raise HTTPException(status_code=500, detail=error_response.to_dict())
 ```
 
 ### **2. Custom Exception Usage**
@@ -216,7 +216,7 @@ if framerate < 0.1 or framerate > 8.0:
         {"operation": "live_view_stream", "framerate": framerate},
         request_id
     )
-    raise HTTPException(status_code=400, detail=error_response.dict())
+    raise HTTPException(status_code=400, detail=error_response.to_dict())
 ```
 
 ### **Resource Validation**

@@ -102,7 +102,7 @@ def create_app() -> FastAPI:
 
         return JSONResponse(
             status_code=error_response.status_code,
-            content=error_response.dict(),
+            content=error_response.to_dict(),
             headers={"X-Request-ID": request_id},
         )
 

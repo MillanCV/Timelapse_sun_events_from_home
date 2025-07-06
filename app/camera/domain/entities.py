@@ -93,6 +93,19 @@ class ErrorResponse:
         if self.timestamp is None:
             self.timestamp = datetime.now()
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the error response to a dictionary for JSON serialization."""
+        return {
+            "success": self.success,
+            "error_type": self.error_type,
+            "message": self.message,
+            "code": self.code,
+            "details": self.details,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "request_id": self.request_id,
+            "status_code": self.status_code,
+        }
+
 
 # Custom Exceptions
 class CameraControlError(Exception):

@@ -1,7 +1,7 @@
 import logging
 import traceback
 import uuid
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Any, Callable, Protocol
 from functools import wraps
 from datetime import datetime
 
@@ -17,12 +17,20 @@ from ..domain.entities import (
 )
 
 
+class ErrorHandler(Protocol):
+    """Protocol for error handler functions."""
+
+    def __call__(
+        self, error: Exception, details: ErrorDetails, request_id: str
+    ) -> ErrorResponse: ...
+
+
 class ErrorHandlingService:
     """Centralized error handling service for the camera module."""
 
     def __init__(self, logger: Optional[logging.Logger] = None):
         self.logger = logger or logging.getLogger(__name__)
-        self._error_handlers: Dict[ErrorType, Callable] = {}
+        self._error_handlers: Dict[ErrorType, ErrorHandler] = {}
         self._setup_default_handlers()
 
     def _setup_default_handlers(self):

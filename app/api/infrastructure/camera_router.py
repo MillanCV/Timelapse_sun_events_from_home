@@ -105,7 +105,7 @@ def create_camera_router() -> APIRouter:
                     {"operation": "camera_shooting"},
                     request_id,
                 )
-                raise HTTPException(status_code=500, detail=error_response.dict())
+                raise HTTPException(status_code=500, detail=error_response.to_dict())
 
         except HTTPException:
             raise
@@ -114,7 +114,7 @@ def create_camera_router() -> APIRouter:
             error_response = error_service.handle_error(
                 e, {"operation": "camera_shooting"}, request_id
             )
-            raise HTTPException(status_code=500, detail=error_response.dict())
+            raise HTTPException(status_code=500, detail=error_response.to_dict())
 
     @router.get("/live-view/snapshot")
     async def take_live_view_snapshot(
@@ -165,7 +165,7 @@ def create_camera_router() -> APIRouter:
                     {"operation": "live_view_snapshot"},
                     request_id,
                 )
-                raise HTTPException(status_code=500, detail=error_response.dict())
+                raise HTTPException(status_code=500, detail=error_response.to_dict())
 
         except HTTPException:
             raise
@@ -174,7 +174,7 @@ def create_camera_router() -> APIRouter:
             error_response = error_service.handle_error(
                 e, {"operation": "live_view_snapshot"}, request_id
             )
-            raise HTTPException(status_code=500, detail=error_response.dict())
+            raise HTTPException(status_code=500, detail=error_response.to_dict())
 
     @router.get("/live-view/stream")
     async def start_live_view_stream(
@@ -221,7 +221,7 @@ def create_camera_router() -> APIRouter:
                     },
                     request_id,
                 )
-                raise HTTPException(status_code=400, detail=error_response.dict())
+                raise HTTPException(status_code=400, detail=error_response.to_dict())
 
             if quality < 1 or quality > 100:
                 error_response = error_service.handle_error(
@@ -233,7 +233,7 @@ def create_camera_router() -> APIRouter:
                     },
                     request_id,
                 )
-                raise HTTPException(status_code=400, detail=error_response.dict())
+                raise HTTPException(status_code=400, detail=error_response.to_dict())
 
             use_case = StartLiveViewStreamUseCase(container.camera_service)
             request_data = StartLiveViewStreamRequest(
@@ -269,7 +269,7 @@ def create_camera_router() -> APIRouter:
                     },
                     request_id,
                 )
-                raise HTTPException(status_code=500, detail=error_response.dict())
+                raise HTTPException(status_code=500, detail=error_response.to_dict())
 
         except HTTPException:
             raise
@@ -284,7 +284,7 @@ def create_camera_router() -> APIRouter:
                 },
                 request_id,
             )
-            raise HTTPException(status_code=500, detail=error_response.dict())
+            raise HTTPException(status_code=500, detail=error_response.to_dict())
 
     @router.get("/last-picture")
     async def get_last_picture(
@@ -309,7 +309,7 @@ def create_camera_router() -> APIRouter:
                 {"operation": "get_last_picture"},
                 request_id,
             )
-            raise HTTPException(status_code=501, detail=error_response.dict())
+            raise HTTPException(status_code=501, detail=error_response.to_dict())
 
         except HTTPException:
             raise
@@ -318,7 +318,7 @@ def create_camera_router() -> APIRouter:
             error_response = error_service.handle_error(
                 e, {"operation": "get_last_picture"}, request_id
             )
-            raise HTTPException(status_code=500, detail=error_response.dict())
+            raise HTTPException(status_code=500, detail=error_response.to_dict())
 
     @router.get("/configuration")
     async def get_configuration(
@@ -339,7 +339,7 @@ def create_camera_router() -> APIRouter:
                     {"operation": "get_configuration"},
                     request_id,
                 )
-                raise HTTPException(status_code=500, detail=error_response.dict())
+                raise HTTPException(status_code=500, detail=error_response.to_dict())
 
             config = config_service.configuration
             if not config:
@@ -348,7 +348,7 @@ def create_camera_router() -> APIRouter:
                     {"operation": "get_configuration"},
                     request_id,
                 )
-                raise HTTPException(status_code=500, detail=error_response.dict())
+                raise HTTPException(status_code=500, detail=error_response.to_dict())
 
             return error_service.create_success_response(
                 {
@@ -400,7 +400,7 @@ def create_camera_router() -> APIRouter:
             error_response = error_service.handle_error(
                 e, {"operation": "get_configuration"}, request_id
             )
-            raise HTTPException(status_code=500, detail=error_response.dict())
+            raise HTTPException(status_code=500, detail=error_response.to_dict())
 
     @router.post("/configuration/reload")
     async def reload_configuration(
@@ -429,7 +429,7 @@ def create_camera_router() -> APIRouter:
                     {"operation": "reload_configuration"},
                     request_id,
                 )
-                raise HTTPException(status_code=500, detail=error_response.dict())
+                raise HTTPException(status_code=500, detail=error_response.to_dict())
 
         except HTTPException:
             raise
@@ -438,6 +438,6 @@ def create_camera_router() -> APIRouter:
             error_response = error_service.handle_error(
                 e, {"operation": "reload_configuration"}, request_id
             )
-            raise HTTPException(status_code=500, detail=error_response.dict())
+            raise HTTPException(status_code=500, detail=error_response.to_dict())
 
     return router
