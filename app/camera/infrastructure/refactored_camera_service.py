@@ -158,11 +158,11 @@ class RefactoredCHDKPTPCameraService(CameraControlService):
             cmd_args = [
                 "-ec",  # connect
                 "-erec",  # switch to record mode
-                '-e"clock -sync"',  # sync clock
-                '-e"luar set_lcd_display(0)"',  # turn off LCD
-                '-e"luar set_mf(1)"',  # set manual focus
-                '-e"luar set_aelock(1)"',  # set AE lock
-                '-e"luar set_aflock(1)"',  # set AF lock
+                "-eclock -sync",  # sync clock
+                "-eluar set_lcd_display(0)",  # turn off LCD
+                "-eluar set_mf(1)",  # set manual focus
+                "-eluar set_aelock(1)",  # set AE lock
+                "-eluar set_aflock(1)",  # set AF lock
                 f"-ers {self.config.output_directory} "
                 f"-shots={parameters.shots} "
                 f"-int={parameters.interval} "
