@@ -117,13 +117,11 @@ def create_app() -> FastAPI:
     app.include_router(camera_router)
 
     @app.get("/")
-    @handle_errors
     async def root():
         """Root endpoint."""
         return {"message": "Sun Events API", "version": "1.0.0"}
 
     @app.get("/health")
-    @handle_errors
     async def health_check():
         """Health check endpoint."""
         return {
