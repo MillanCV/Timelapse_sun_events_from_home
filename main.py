@@ -10,9 +10,13 @@ from app.api.infrastructure.fastapi_app import create_app
 from app.background.infrastructure.sun_event_monitor_service import (
     SunEventMonitorService,
 )
-from app.background.infrastructure.sun_event_orchestrator import SunEventOrchestrator
+from app.background.infrastructure.sun_event_orchestrator import (
+    SunEventOrchestrator,
+)
 from app.camera.infrastructure.container import get_camera_container
-from app.sun_events.infrastructure.json_repository import JSONSunEventRepository
+from app.sun_events.infrastructure.json_repository import (
+    JSONSunEventRepository,
+)
 from app.timelapse.application.use_cases import CalculateTimelapseUseCase
 from app.video_processing.infrastructure.ffmpeg_video_processor import (
     FFmpegVideoProcessor,
@@ -50,11 +54,11 @@ async def lifespan(app: FastAPI):
     # Initialize video processor
     video_processor = FFmpegVideoProcessor()
 
-    # Initialize orchestrator
+    # Initialize orchestrator with optional camera service
     orchestrator = SunEventOrchestrator(
         sun_event_repository=sun_event_repository,
         timelapse_use_case=timelapse_use_case,
-        camera_control_service=camera_service,
+        camera_control_service=camera_service,  # Can be None
         video_processor=video_processor,
     )
 

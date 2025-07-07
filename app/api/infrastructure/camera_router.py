@@ -86,7 +86,16 @@ def create_camera_router() -> APIRouter:
         try:
             logger.info("📸 Starting camera shooting")
 
-            use_case = ShootCameraUseCase(container.camera_service)
+            camera_service = container.camera_service
+            if not camera_service:
+                error_response = error_service.handle_error(
+                    RuntimeError("Camera service not available - check configuration"),
+                    {"operation": "camera_shooting"},
+                    request_id,
+                )
+                raise HTTPException(status_code=503, detail=error_response.to_dict())
+
+            use_case = ShootCameraUseCase(camera_service)
             result = await use_case.execute()
 
             if result.success:
@@ -130,6 +139,15 @@ def create_camera_router() -> APIRouter:
         try:
             logger.info(f"📸 Taking live view snapshot with quality={quality}")
 
+            camera_service = container.camera_service
+            if not camera_service:
+                error_response = error_service.handle_error(
+                    RuntimeError("Camera service not available - check configuration"),
+                    {"operation": "live_view_snapshot"},
+                    request_id,
+                )
+                raise HTTPException(status_code=503, detail=error_response.to_dict())
+
             # Get default quality from configuration if not provided
             if quality is None:
                 image_config = container.image_config
@@ -138,7 +156,7 @@ def create_camera_router() -> APIRouter:
                 else:
                     quality = 80  # Fallback default
 
-            use_case = TakeLiveViewSnapshotUseCase(container.camera_service)
+            use_case = TakeLiveViewSnapshotUseCase(camera_service)
             request_data = TakeLiveViewSnapshotRequest()
 
             result = await use_case.execute(request_data)
@@ -196,6 +214,15 @@ def create_camera_router() -> APIRouter:
                 f"quality={quality}"
             )
 
+            camera_service = container.camera_service
+            if not camera_service:
+                error_response = error_service.handle_error(
+                    RuntimeError("Camera service not available - check configuration"),
+                    {"operation": "live_view_stream"},
+                    request_id,
+                )
+                raise HTTPException(status_code=503, detail=error_response.to_dict())
+
             # Get default values from configuration if not provided
             if framerate is None:
                 camera_config = container.camera_config
@@ -236,7 +263,7 @@ def create_camera_router() -> APIRouter:
                 )
                 raise HTTPException(status_code=400, detail=error_response.to_dict())
 
-            use_case = StartLiveViewStreamUseCase(container.camera_service)
+            use_case = StartLiveViewStreamUseCase(camera_service)
             request_data = StartLiveViewStreamRequest(
                 framerate=framerate, quality=quality
             )
@@ -397,15 +424,22 @@ def create_camera_router() -> APIRouter:
 
             config = config_service.configuration
             if not config:
-                error_response = error_service.handle_error(
-                    RuntimeError("Configuration not loaded"),
-                    {"operation": "get_configuration"},
+                # Return partial configuration with error message
+                logger.warning("Configuration not loaded, returning partial config")
+                return error_service.create_success_response(
+                    {
+                        "status": "partial",
+                        "message": "Configuration not fully loaded due to validation errors",
+                        "camera": None,
+                        "image_processing": None,
+                        "environment": None,
+                    },
                     request_id,
                 )
-                raise HTTPException(status_code=500, detail=error_response.to_dict())
 
             return error_service.create_success_response(
                 {
+                    "status": "complete",
                     "camera": {
                         "chdkptp_location": config.camera.chdkptp_location,
                         "output_directory": config.camera.output_directory,

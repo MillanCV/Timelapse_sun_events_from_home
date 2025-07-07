@@ -20,7 +20,7 @@ class SunEventOrchestrator:
         self,
         sun_event_repository: SunEventRepository,
         timelapse_use_case: CalculateTimelapseUseCase,
-        camera_control_service: CameraControlService,
+        camera_control_service: Optional[CameraControlService],
         video_processor: FFmpegVideoProcessor,
     ):
         self.sun_event_repository = sun_event_repository
@@ -94,6 +94,11 @@ class SunEventOrchestrator:
     async def _start_camera_recording(self, period: SunEventPeriod, timelapse_params):
         """Start camera recording for timelapse."""
         try:
+            # Check if camera service is available
+            if not self.camera_control_service:
+                self.logger.warning("Camera service not available, skipping recording")
+                return
+
             # Check if camera is connected
             if not await self.camera_control_service.is_camera_connected():
                 self.logger.warning("Camera not connected, skipping recording")

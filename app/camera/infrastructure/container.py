@@ -47,12 +47,13 @@ class CameraContainer:
         return self._config_service.get_environment_config()
 
     @property
-    def subprocess_service(self) -> CHDKPTPSubprocessService:
+    def subprocess_service(self) -> Optional[CHDKPTPSubprocessService]:
         """Get or create subprocess service."""
         if self._subprocess_service is None:
             camera_config = self.camera_config
             if not camera_config:
-                raise RuntimeError("Camera configuration not available")
+                self.logger.warning("Camera configuration not available")
+                return None
 
             self.logger.info("🔧 Creating CHDKPTP subprocess service")
             self._subprocess_service = CHDKPTPSubprocessService(
@@ -61,24 +62,26 @@ class CameraContainer:
         return self._subprocess_service
 
     @property
-    def image_service(self) -> OpenCVImageProcessingService:
+    def image_service(self) -> Optional[OpenCVImageProcessingService]:
         """Get or create image processing service."""
         if self._image_service is None:
             image_config = self.image_config
             if not image_config:
-                raise RuntimeError("Image processing configuration not available")
+                self.logger.warning("Image processing configuration not available")
+                return None
 
             self.logger.info("🖼️ Creating OpenCV image processing service")
             self._image_service = OpenCVImageProcessingService(image_config)
         return self._image_service
 
     @property
-    def file_service(self) -> LocalFileManagementService:
+    def file_service(self) -> Optional[LocalFileManagementService]:
         """Get or create file management service."""
         if self._file_service is None:
             camera_config = self.camera_config
             if not camera_config:
-                raise RuntimeError("Camera configuration not available")
+                self.logger.warning("Camera configuration not available")
+                return None
 
             self.logger.info("📁 Creating local file management service")
             self._file_service = LocalFileManagementService(
@@ -87,18 +90,28 @@ class CameraContainer:
         return self._file_service
 
     @property
-    def camera_service(self) -> CameraControlService:
+    def camera_service(self) -> Optional[CameraControlService]:
         """Get or create camera control service."""
         if self._camera_service is None:
             camera_config = self.camera_config
             if not camera_config:
-                raise RuntimeError("Camera configuration not available")
+                self.logger.warning("Camera configuration not available")
+                return None
+
+            # Check if all required services are available
+            subprocess_service = self.subprocess_service
+            image_service = self.image_service
+            file_service = self.file_service
+
+            if not all([subprocess_service, image_service, file_service]):
+                self.logger.warning("Required camera services not available")
+                return None
 
             self.logger.info("📸 Creating refactored camera service")
             self._camera_service = RefactoredCHDKPTPCameraService(
-                subprocess_service=self.subprocess_service,
-                image_service=self.image_service,
-                file_service=self.file_service,
+                subprocess_service=subprocess_service,
+                image_service=image_service,
+                file_service=file_service,
                 config=camera_config,
             )
         return self._camera_service
@@ -135,20 +148,26 @@ class CameraContainer:
             # Load and validate configuration
             result = self._config_service.load_configuration()
             if not result.is_success:
-                self.logger.error(f"Configuration validation failed: {result.error}")
-                return False
+                self.logger.warning(f"Configuration validation failed: {result.error}")
+                # Don't fail initialization, just log warning
+                return True
 
-            # Validate CHDKPTP setup
-            if not await self.subprocess_service.validate_executable("chdkptp.sh"):
-                self.logger.error("❌ CHDKPTP script not found")
-                return False
+            # Try to validate CHDKPTP setup if configuration is available
+            subprocess_service = self.subprocess_service
+            if subprocess_service:
+                if not await subprocess_service.validate_executable("chdkptp.sh"):
+                    self.logger.warning("❌ CHDKPTP script not found")
+                    # Don't fail initialization, just log warning
 
-            # Ensure output directory exists
-            if not await self.file_service.ensure_directory_exists(
-                self.camera_config.output_directory
-            ):
-                self.logger.error("❌ Could not create output directory")
-                return False
+            # Try to ensure output directory exists if configuration is available
+            file_service = self.file_service
+            camera_config = self.camera_config
+            if file_service and camera_config:
+                if not await file_service.ensure_directory_exists(
+                    camera_config.output_directory
+                ):
+                    self.logger.warning("❌ Could not create output directory")
+                    # Don't fail initialization, just log warning
 
             self.logger.info("✅ Camera container initialized successfully")
             return True
