@@ -268,36 +268,40 @@ def create_camera_router() -> APIRouter:
                 framerate=framerate, quality=quality
             )
 
-            result = await use_case.execute(request_data)
+            # Get the async generator (don't await it!)
+            stream_generator = use_case.execute(request_data)
 
-            if result.is_success:
-                logger.info("✅ Live view stream started successfully")
+            # Create a generator function that converts LiveViewResult to bytes
+            async def generate_stream():
+                async for result in stream_generator:
+                    if result.success and result.image_data:
+                        # Format as multipart stream frame
+                        yield (
+                            b"--frame\r\n"
+                            b"Content-Type: image/jpeg\r\n\r\n"
+                            + result.image_data
+                            + b"\r\n"
+                        )
+                    else:
+                        # Stream ended or error occurred
+                        logger.warning(f"Stream result: {result.message}")
+                        break
 
-                # Add cache-busting headers
-                headers = {
-                    "Cache-Control": "no-cache, no-store, must-revalidate",
-                    "Pragma": "no-cache",
-                    "Expires": "0",
-                    "X-Request-ID": request_id,
-                }
+            logger.info("✅ Live view stream started successfully")
 
-                return StreamingResponse(
-                    result.value,
-                    media_type="multipart/x-mixed-replace; boundary=frame",
-                    headers=headers,
-                )
-            else:
-                logger.error(f"❌ Live view stream failed: {result.error}")
-                error_response = error_service.handle_error(
-                    Exception(result.error),
-                    {
-                        "operation": "live_view_stream",
-                        "framerate": framerate,
-                        "quality": quality,
-                    },
-                    request_id,
-                )
-                raise HTTPException(status_code=500, detail=error_response.to_dict())
+            # Add cache-busting headers
+            headers = {
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+                "X-Request-ID": request_id,
+            }
+
+            return StreamingResponse(
+                generate_stream(),
+                media_type="multipart/x-mixed-replace; boundary=frame",
+                headers=headers,
+            )
 
         except HTTPException:
             raise
