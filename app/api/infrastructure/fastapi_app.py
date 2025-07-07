@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from .camera_router import create_camera_router
 from ...camera.infrastructure.error_handling_service import (
     get_error_handling_service,
-    handle_errors,
 )
 from ...camera.domain.entities import (
     ErrorType,
@@ -131,7 +130,6 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/current")
-    @handle_errors
     async def get_current_event(request: Request):
         """Get current sun event period if any."""
         try:
@@ -162,7 +160,6 @@ def create_app() -> FastAPI:
             raise
 
     @app.get("/upcoming")
-    @handle_errors
     async def get_upcoming_events(request: Request):
         """Get upcoming sun event periods."""
         try:
@@ -196,7 +193,6 @@ def create_app() -> FastAPI:
             raise
 
     @app.post("/timelapse", response_model=TimelapseResponseModel)
-    @handle_errors
     async def calculate_timelapse(
         request: Request, timelapse_request: TimelapseRequestModel
     ):
