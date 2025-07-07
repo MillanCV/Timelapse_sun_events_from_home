@@ -2,7 +2,13 @@ from dataclasses import dataclass
 from typing import Optional, AsyncGenerator
 import logging
 
-from ..domain.entities import CameraCommand, LiveViewResult, LiveViewStream, Result
+from ..domain.entities import (
+    CameraCommand,
+    LiveViewResult,
+    LiveViewStream,
+    Result,
+    ManualShootingParameters,
+)
 from ..domain.services import CameraControlService
 
 
@@ -57,6 +63,28 @@ class StartLiveViewStreamRequest:
 
     framerate: float = 5.0
     quality: int = 80
+
+
+@dataclass
+class ManualShootingRequest:
+    """Request for manual shooting."""
+
+    subject_distance: int
+    speed: str
+    iso: int
+    shots: int
+    interval: int
+
+
+@dataclass
+class ManualShootingResponse:
+    """Response for manual shooting."""
+
+    success: bool
+    message: str
+    shooting_id: Optional[str] = None
+    images_captured: int = 0
+    image_paths: list[str] = None
 
 
 class ShootCameraUseCase:
@@ -240,4 +268,77 @@ class StartLiveViewStreamUseCase:
                 message=f"Error starting live view stream: {str(e)}",
                 image_data=None,
                 image_format=None,
+            )
+
+
+class ManualShootingUseCase:
+    """Use case for manual camera shooting."""
+
+    def __init__(self, camera_control_service: CameraControlService):
+        self.camera_control_service = camera_control_service
+        self.logger = logging.getLogger(__name__)
+
+    def _validate_request(self, request: ManualShootingRequest) -> Result[None]:
+        """Validate manual shooting request."""
+        if request.shots <= 0:
+            return Result.failure("Number of shots must be greater than 0")
+
+        if request.interval < 0:
+            return Result.failure("Interval must be non-negative")
+
+        if request.iso <= 0:
+            return Result.failure("ISO value must be greater than 0")
+
+        if request.subject_distance <= 0:
+            return Result.failure("Subject distance must be greater than 0")
+
+        if not request.speed:
+            return Result.failure("Speed parameter cannot be empty")
+
+        return Result.success(None)
+
+    async def execute(self, request: ManualShootingRequest) -> ManualShootingResponse:
+        """Execute the manual shooting use case."""
+        try:
+            self.logger.info(
+                f"Executing manual shooting use case: {request.shots} shots"
+            )
+
+            # Validate request
+            validation_result = self._validate_request(request)
+            if not validation_result.is_success:
+                return ManualShootingResponse(
+                    success=False,
+                    message=validation_result.error,
+                    images_captured=0,
+                    image_paths=[],
+                )
+
+            # Create parameters
+            parameters = ManualShootingParameters(
+                subject_distance=request.subject_distance,
+                speed=request.speed,
+                iso=request.iso,
+                shots=request.shots,
+                interval=request.interval,
+            )
+
+            # Execute manual shooting
+            result = await self.camera_control_service.manual_shoot(parameters)
+
+            return ManualShootingResponse(
+                success=result.success,
+                message=result.message,
+                shooting_id=result.shooting_id,
+                images_captured=result.images_captured,
+                image_paths=result.image_paths,
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error in manual shooting use case: {e}")
+            return ManualShootingResponse(
+                success=False,
+                message=f"Error in manual shooting: {str(e)}",
+                images_captured=0,
+                image_paths=[],
             )

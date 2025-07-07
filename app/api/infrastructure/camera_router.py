@@ -11,6 +11,8 @@ from ...camera.application.use_cases import (
     StartLiveViewStreamUseCase,
     TakeLiveViewSnapshotRequest,
     StartLiveViewStreamRequest,
+    ManualShootingUseCase,
+    ManualShootingRequest,
 )
 from ...camera.infrastructure.container import get_camera_container
 from ...camera.infrastructure.error_handling_service import (
@@ -59,6 +61,26 @@ class ListImagesResponseModel(BaseModel):
     message: str
     images: List[ImageInfoModel]
     total_count: int
+
+
+class ManualShootingRequestModel(BaseModel):
+    """Pydantic model for manual shooting request."""
+
+    subject_distance: int
+    speed: str
+    iso: int
+    shots: int
+    interval: int
+
+
+class ManualShootingResponseModel(BaseModel):
+    """Pydantic model for manual shooting response."""
+
+    success: bool
+    message: str
+    shooting_id: Optional[str] = None
+    images_captured: int = 0
+    image_paths: List[str] = []
 
 
 def create_camera_router() -> APIRouter:
@@ -123,6 +145,71 @@ def create_camera_router() -> APIRouter:
             logger.error(f"❌ Unexpected error in camera shooting: {e}")
             error_response = error_service.handle_error(
                 e, {"operation": "camera_shooting"}, request_id
+            )
+            raise HTTPException(status_code=500, detail=error_response.to_dict())
+
+    @router.post("/manual-shoot")
+    async def manual_shoot(
+        request: Request,
+        shooting_request: ManualShootingRequestModel,
+        container=Depends(get_camera_container_dependency),
+        error_service=Depends(get_error_handling_service_dependency),
+    ):
+        """Take photos with manual camera settings."""
+        request_id = str(request.headers.get("X-Request-ID", ""))
+
+        try:
+            logger.info(f"📸 Starting manual shooting: {shooting_request.shots} shots")
+
+            camera_service = container.camera_service
+            if not camera_service:
+                error_response = error_service.handle_error(
+                    RuntimeError("Camera service not available - check configuration"),
+                    {"operation": "manual_shooting"},
+                    request_id,
+                )
+                raise HTTPException(status_code=503, detail=error_response.to_dict())
+
+            # Create use case request
+            use_case_request = ManualShootingRequest(
+                subject_distance=shooting_request.subject_distance,
+                speed=shooting_request.speed,
+                iso=shooting_request.iso,
+                shots=shooting_request.shots,
+                interval=shooting_request.interval,
+            )
+
+            use_case = ManualShootingUseCase(camera_service)
+            result = await use_case.execute(use_case_request)
+
+            if result.success:
+                logger.info(
+                    f"✅ Manual shooting successful: {result.images_captured} images"
+                )
+                return error_service.create_success_response(
+                    {
+                        "message": result.message,
+                        "shooting_id": result.shooting_id,
+                        "images_captured": result.images_captured,
+                        "image_paths": result.image_paths,
+                    },
+                    request_id,
+                )
+            else:
+                logger.error(f"❌ Manual shooting failed: {result.message}")
+                error_response = error_service.handle_error(
+                    Exception(result.message),
+                    {"operation": "manual_shooting"},
+                    request_id,
+                )
+                raise HTTPException(status_code=500, detail=error_response.to_dict())
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Unexpected error in manual shooting: {e}")
+            error_response = error_service.handle_error(
+                e, {"operation": "manual_shooting"}, request_id
             )
             raise HTTPException(status_code=500, detail=error_response.to_dict())
 

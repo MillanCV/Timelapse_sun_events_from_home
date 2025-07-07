@@ -5,6 +5,8 @@ from .entities import (
     CameraCommand,
     LiveViewResult,
     LiveViewStream,
+    ManualShootingParameters,
+    ManualShootingResult,
 )
 
 
@@ -14,6 +16,13 @@ class CameraControlService(ABC):
     @abstractmethod
     async def shoot_camera(self) -> CameraShootingResult:
         """Shoot camera and return the result with image path."""
+        pass
+
+    @abstractmethod
+    async def manual_shoot(
+        self, parameters: ManualShootingParameters
+    ) -> ManualShootingResult:
+        """Shoot camera in manual mode with specific parameters."""
         pass
 
     @abstractmethod

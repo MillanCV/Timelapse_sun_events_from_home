@@ -489,3 +489,45 @@ class ApplicationConfiguration:
             return Result.failure(
                 f"Application configuration validation error: {str(e)}"
             )
+
+
+@dataclass
+class ManualShootingParameters:
+    """Domain entity for manual shooting parameters."""
+
+    subject_distance: int  # Subject distance (sd parameter)
+    speed: str  # Shutter speed (tv parameter)
+    iso: int  # ISO value (isomode parameter)
+    shots: int  # Number of shots
+    interval: int  # Interval time between shots in seconds
+
+    def __post_init__(self):
+        """Validate parameters after initialization."""
+        if self.shots <= 0:
+            raise ValueError("Number of shots must be greater than 0")
+        if self.interval < 0:
+            raise ValueError("Interval must be non-negative")
+        if self.iso <= 0:
+            raise ValueError("ISO value must be greater than 0")
+        if self.subject_distance <= 0:
+            raise ValueError("Subject distance must be greater than 0")
+        if not self.speed:
+            raise ValueError("Speed parameter cannot be empty")
+
+
+@dataclass
+class ManualShootingResult:
+    """Domain entity for manual shooting results."""
+
+    success: bool
+    message: str
+    shooting_id: Optional[str] = None
+    images_captured: int = 0
+    image_paths: list[str] = None
+    timestamp: datetime = None
+
+    def __post_init__(self):
+        if self.timestamp is None:
+            self.timestamp = datetime.now()
+        if self.image_paths is None:
+            self.image_paths = []

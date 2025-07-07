@@ -10,6 +10,8 @@ from ..domain.entities import (
     LiveViewResult,
     LiveViewStream,
     CameraCommand,
+    ManualShootingParameters,
+    ManualShootingResult,
 )
 from ..domain.services import CameraControlService
 from .subprocess_service import CHDKPTPSubprocessService
@@ -129,6 +131,97 @@ class RefactoredCHDKPTPCameraService(CameraControlService):
                 message=f"Error executing command: {str(e)}",
                 shooting_id=None,
                 image_path=None,
+                timestamp=datetime.now(),
+            )
+
+    async def manual_shoot(
+        self, parameters: ManualShootingParameters
+    ) -> ManualShootingResult:
+        """Shoot camera in manual mode with specific parameters."""
+        try:
+            self.logger.info(
+                f"📸 Starting manual shooting with {parameters.shots} shots"
+            )
+
+            # Validate CHDKPTP setup
+            if not await self.subprocess_service.validate_executable("chdkptp.sh"):
+                return ManualShootingResult(
+                    success=False,
+                    message="CHDKPTP script not found",
+                    shooting_id=None,
+                    images_captured=0,
+                    image_paths=[],
+                    timestamp=datetime.now(),
+                )
+
+            # Build manual shooting command based on the bash script
+            cmd_args = [
+                "-ec",  # connect
+                "-erec",  # switch to record mode
+                '-e"clock -sync"',  # sync clock
+                '-e"luar set_lcd_display(0)"',  # turn off LCD
+                '-e"luar set_mf(1)"',  # set manual focus
+                '-e"luar set_aelock(1)"',  # set AE lock
+                '-e"luar set_aflock(1)"',  # set AF lock
+                f"-ers {self.config.output_directory} "
+                f"-shots={parameters.shots} "
+                f"-int={parameters.interval} "
+                f"-tv={parameters.speed} "
+                f"-sd={parameters.subject_distance} "
+                f"-isomode={parameters.iso}",  # remote shoot with parameters
+                "-eplay",  # switch to play mode
+                "-edisconnect",  # disconnect
+            ]
+
+            # Execute command
+            (
+                success,
+                stdout,
+                stderr,
+            ) = await self.subprocess_service.execute_chdkptp_command(cmd_args)
+
+            if success:
+                self.logger.info(
+                    f"📸 Manual shooting completed successfully: "
+                    f"{parameters.shots} shots"
+                )
+
+                # Get the latest images from the output directory
+                # We expect multiple images based on the shots parameter
+                all_images = await self.file_service.list_image_files(
+                    self.config.output_directory
+                )
+                # Take the first N images (newest first)
+                image_paths = all_images[: parameters.shots] if all_images else []
+                shooting_id = f"manual_shoot_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+                return ManualShootingResult(
+                    success=True,
+                    message=f"Manual shooting completed: {len(image_paths)} images captured",
+                    shooting_id=shooting_id,
+                    images_captured=len(image_paths),
+                    image_paths=image_paths,
+                    timestamp=datetime.now(),
+                )
+            else:
+                self.logger.error(f"📸 Manual shooting failed: {stderr}")
+                return ManualShootingResult(
+                    success=False,
+                    message=f"Manual shooting failed: {stderr}",
+                    shooting_id=None,
+                    images_captured=0,
+                    image_paths=[],
+                    timestamp=datetime.now(),
+                )
+
+        except Exception as e:
+            self.logger.error(f"📸 Error in manual shooting: {e}")
+            return ManualShootingResult(
+                success=False,
+                message=f"Error in manual shooting: {str(e)}",
+                shooting_id=None,
+                images_captured=0,
+                image_paths=[],
                 timestamp=datetime.now(),
             )
 
