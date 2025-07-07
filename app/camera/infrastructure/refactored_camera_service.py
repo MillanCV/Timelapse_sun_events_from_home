@@ -5,11 +5,11 @@ from typing import AsyncGenerator
 from datetime import datetime
 
 from ..domain.entities import (
+    CameraConfiguration,
     CameraShootingResult,
-    CameraCommand,
     LiveViewResult,
     LiveViewStream,
-    CameraConfiguration,
+    CameraCommand,
 )
 from ..domain.services import CameraControlService
 from .subprocess_service import CHDKPTPSubprocessService
@@ -18,7 +18,7 @@ from .file_management_service import LocalFileManagementService
 
 
 class RefactoredCHDKPTPCameraService(CameraControlService):
-    """Refactored CHDKPTP camera control service using dependency injection."""
+    """Refactored CHDKPTP-based camera service with better separation of concerns."""
 
     def __init__(
         self,
@@ -239,9 +239,9 @@ class RefactoredCHDKPTPCameraService(CameraControlService):
                         self.logger.warning(f"🎥 Frame {frame_count} failed to read")
                         continue
 
-                    # Convert to JPEG with timestamp
-                    jpeg_data = await self.image_service.convert_to_jpeg(
-                        frame_data, config.quality
+                    # Convert to JPEG with timestamp overlay
+                    jpeg_data = await self.image_service.add_timestamp_overlay(
+                        frame_data
                     )
 
                     yield LiveViewResult(
@@ -321,7 +321,9 @@ class RefactoredCHDKPTPCameraService(CameraControlService):
 
             return CameraShootingResult(
                 success=len(image_paths) > 0,
-                message=f"Auto shoot completed: {len(image_paths)}/{shots} shots taken",
+                message=(
+                    f"Auto shoot completed: {len(image_paths)}/{shots} shots taken"
+                ),
                 shooting_id=shooting_id,
                 image_path=final_image_path,
                 timestamp=datetime.now(),
